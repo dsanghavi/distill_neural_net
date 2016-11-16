@@ -84,7 +84,8 @@ for T in Ts:
 
 			acc = accuracy.eval(feed_dict={x: mnist.test.images, y_: mnist.test.labels})
 			print("alpha: %f, test accuracy %g"%(alpha, acc))
-			results.append((T,alpha,acc))
+			results.append((repeat,T,alpha,acc))
+			sess.close()
 f = open('results.pickle','wb')
 pickle.dump(results,f)
 f.close()
