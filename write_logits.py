@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+from helper_functions import *
 
 def weight_variable(shape):
   initial = tf.truncated_normal(shape, stddev=0.1)
@@ -16,14 +17,11 @@ def max_pool_2x2(x):
   return tf.nn.max_pool(x, ksize=[1, 2, 2, 1],
                         strides=[1, 2, 2, 1], padding='SAME')
 
-  # load MNIST data
+# load MNIST data
 from tensorflow.examples.tutorials.mnist import input_data
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
 sess = tf.InteractiveSession()
-
-W_conv1 = weight_variable([5, 5, 1, 32])
-b_conv1 = bias_variable([32])
 
 x = tf.placeholder(tf.float32, shape=[None, 784])
 y_ = tf.placeholder(tf.float32, shape=[None, 10])
@@ -64,22 +62,22 @@ sess.run(tf.initialize_all_variables())
 
 batch_size = 50
 num_epochs = 20
-for i in range(num_epochs*mnist.train.num_examples/batch_size):
-  batch = mnist.train.next_batch(batch_size,shuffle=False)
-  if i%100 == 0:
-    train_accuracy = accuracy.eval(feed_dict={
-        x:batch[0], y_: batch[1], keep_prob: 1.0})
-    print("step %d, training accuracy %g"%(i, train_accuracy))
-  train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
+iters_per_epoch = mnist.train.num_examples/batch_size
+for i in range(num_epochs*iters_per_epoch):
+    batch = mnist.train.next_batch(batch_size,shuffle=False)
+    if i%100 == 0:
+        train_accuracy = accuracy.eval(feed_dict={
+                x:batch[0], y_: batch[1], keep_prob: 1.0})
+        print("step %d, training accuracy %g"%(i, train_accuracy))
+    train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5})
 
-print("test accuracy %g"%accuracy.eval(feed_dict={
-    x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0}))
+print("test accuracy %g"%accuracy_in_batches(mnist.test, accuracy, x, y_, keep_prob, batch_size=batch_size))
 
 # write out logits before softmax
 y_conv_nps = []
-for i in range(mnist.train.num_examples/batch_size):
-	batch = mnist.train.next_batch(batch_size,shuffle=False)
-	y_conv_nps.append(y_conv.eval(feed_dict = {x: batch[0], keep_prob: 1.0}))
+for i in range(iters_per_epoch):
+    batch = mnist.train.next_batch(batch_size,shuffle=False)
+    y_conv_nps.append(y_conv.eval(feed_dict = {x: batch[0], keep_prob: 1.0}))
 
 y_conv_np = np.concatenate(y_conv_nps,axis=0) # new shape = (55000, 10)
 
