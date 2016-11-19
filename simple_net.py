@@ -28,7 +28,7 @@ Ts = np.logspace(0,np.log10(30),6)  # range should be fine, increase intervals w
 alphas = np.linspace(0,1,6)         # range IS fine, increase intervals when ready
 num_repeat = 5                      # could be 10
 batch_size = 50                     # no need to change I guess
-num_epochs = 5                      # could be changed... 5? 10? 20? write_logits.py uses 20.
+num_epochs = 1                      # could be changed... 5? 10? 20? write_logits.py uses 20.
 hidden_sizes = [400, 400]           # could be increased when ready...
 
 results_np = np.zeros([Ts.shape[0], alphas.shape[0]])
@@ -43,7 +43,7 @@ for T in Ts:
     y_soft = softmax_T(logits_cumbersome,T)     # temperature softmax
     for alpha in alphas:
         alpha_index += 1
-        y_new = (alpha*y_soft) + ((1-alpha) * mnist.train.labels)
+        # y_new = (alpha*y_soft) + ((1-alpha) * mnist.train.labels) # interpolate cross entropies, not y!!
         # assert np.mean(np.argmax(y_soft,axis=1) == np.argmax(mnist.train.labels,axis=1)) > 0.99
         avg_acc = 0
         for repeat in range(num_repeat):
@@ -52,7 +52,9 @@ for T in Ts:
             sess = tf.InteractiveSession()
 
             x = tf.placeholder(tf.float32, shape=[None, 784])
-            y_ = tf.placeholder(tf.float32, shape=[None, 10])
+            y_soft_ = tf.placeholder(tf.float32, shape=[None, 10])
+            y_hard_ = tf.placeholder(tf.float32, shape=[None, 10])
+
             #Layers
             W1 = weight_variable([28 * 28, hidden_sizes[0]])
             b1 = bias_variable([hidden_sizes[0]])
@@ -70,12 +72,14 @@ for T in Ts:
             W3 = weight_variable([hidden_sizes[1], 10])
             b3 = bias_variable([10])
             y_out = tf.matmul(h2, W3) + b3
-            y_out_T = softmax_T(y_out, T, tensor=True)         # temperature softmax
-            y_out_1 = softmax_T(y_out, 1, tensor=True)         # temperature=1 softmax
+            y_out_soft = softmax_T(y_out, T, tensor=True)         # temperature softmax
+            y_out_hard = softmax_T(y_out, 1, tensor=True)         # temperature=1 softmax
 
-            cross_entropy = tf.reduce_mean(-tf.reduce_sum(y_ * tf.log(y_out_T), reduction_indices=[1]))
+            cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(y_out_soft), reduction_indices=[1]))
+            cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(y_out_hard), reduction_indices=[1]))
+            cross_entropy = (alpha*cross_entropy_soft) + ((1-alpha)*cross_entropy_hard)
             train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
-            correct_prediction = tf.equal(tf.argmax(y_out_1,1), tf.argmax(y_,1))
+            correct_prediction = tf.equal(tf.argmax(y_out_hard,1), tf.argmax(y_hard_,1))
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
             sess.run(tf.initialize_all_variables())
 
@@ -83,11 +87,13 @@ for T in Ts:
             for i in range(num_epochs*iters_per_epoch):
                 batch = mnist.train.next_batch(batch_size,shuffle=False)
                 if i%1000 == 0:
-                    train_accuracy = accuracy.eval(feed_dict={x:batch[0], y_: batch[1]})
+                    train_accuracy = accuracy.eval(feed_dict={x:batch[0], y_hard_: batch[1]})
                     print("step %d, training accuracy %g"%(i, train_accuracy))
-                train_step.run(feed_dict={x: batch[0], y_: y_new[(i%1100)*batch_size:((i%1100)+1)*batch_size]})
+                train_step.run(feed_dict={x: batch[0],
+                                          y_soft_: y_soft[(i%1100)*batch_size:((i%1100)+1)*batch_size],
+                                          y_hard_: batch[1]})
 
-            acc = accuracy_in_batches(mnist.test, accuracy, x, y_, batch_size=batch_size)
+            acc = accuracy_in_batches(mnist.test, accuracy, x, y_hard_, batch_size=batch_size)
             results_np_w_repeat[T_index, alpha_index, repeat] = acc
             avg_acc += acc
             sess.close()
