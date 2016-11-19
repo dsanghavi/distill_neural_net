@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 
 def accuracy_in_batches(data, accuracy_func, x, y_, keep_prob=None, batch_size=50):
     y_accs = []
@@ -12,7 +13,12 @@ def accuracy_in_batches(data, accuracy_func, x, y_, keep_prob=None, batch_size=5
                     x: check_batch[0], y_: check_batch[1], keep_prob: 1.0}))
     return np.mean(y_accs)
 
-# def cross_entropy_loss(x, y):
-#     N = x.shape[0]
-#     loss = (-1/N) *
-#     return loss
+def softmax_T(logits, T, tensor=False):
+    # logits dim = (N, C), T = float
+    if tensor:
+        l1 = tf.exp(logits / T)
+        l1 = l1 / tf.reduce_sum(l1, reduction_indices=1)[:, tf.newaxis]
+    else:
+        l1 = np.exp(logits / T)
+        l1 = l1 / np.sum(l1, axis=1)[:, np.newaxis]
+    return l1
