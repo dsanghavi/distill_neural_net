@@ -17,8 +17,8 @@ def softmax_T(logits, T, tensor=False):
     # logits dim = (N, C), T = float
     if tensor:
         l1 = tf.exp(logits / T)
-        l1 = l1 / tf.reduce_sum(l1, reduction_indices=1)[:, tf.newaxis]
+        l1 = l1 / tf.reduce_sum(l1, reduction_indices=1, keep_dims=True)
     else:
         l1 = np.exp(logits / T)
-        l1 = l1 / np.sum(l1, axis=1)[:, np.newaxis]
+        l1 = l1 / np.sum(l1, axis=1, keepdims=True)
     return l1
