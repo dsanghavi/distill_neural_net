@@ -24,12 +24,12 @@ from tensorflow.examples.tutorials.mnist import input_data
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
 # RUN PARAMETERS
-Ts = np.logspace(0,np.log10(30),6)  # range should be fine, increase intervals when ready
-alphas = np.linspace(0,1,6)         # range IS fine, increase intervals when ready
+Ts = np.logspace(0,np.log10(60),8)  # range should be fine, increase intervals when ready
+alphas = np.linspace(0,1,5)         # range IS fine, increase intervals when ready
 num_repeat = 5                      # could be 10
 batch_size = 50                     # no need to change I guess
-num_epochs = 1                      # could be changed... 5? 10? 20? write_logits.py uses 20.
-hidden_sizes = [400, 400]           # could be increased when ready...
+num_epochs = 2                      # could be changed... 5? 10? 20? write_logits.py uses 20.
+hidden_sizes = [800, 800]           # could be increased when ready...
 
 results_np = np.zeros([Ts.shape[0], alphas.shape[0]])
 results_np_w_repeat = np.zeros([Ts.shape[0], alphas.shape[0], num_repeat])
@@ -108,4 +108,4 @@ pickle.dump(results,f)
 f.close()
 
 np.savetxt('results_np.csv', results_np, delimiter=",")
-np.savetxt('results_np_w_repeat.csv', results_np_w_repeat, delimiter=",")
+np.savetxt('results_np_w_repeat.csv', results_np_w_repeat.reshape([Ts.shape[0], alphas.shape[0]*num_repeat]), delimiter=",")
