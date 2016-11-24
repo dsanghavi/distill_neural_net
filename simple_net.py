@@ -1,6 +1,5 @@
 import tensorflow as tf
 import numpy as np
-import pickle
 from helper_functions import *
 
 
@@ -24,16 +23,15 @@ from tensorflow.examples.tutorials.mnist import input_data
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
 # RUN PARAMETERS
-Ts = np.logspace(0,np.log10(30),5)  # range should be fine, increase intervals when ready
-alphas = np.linspace(0,1,5)         # range IS fine, increase intervals when ready
-num_repeat = 10                     # could be 10
+Ts = np.logspace(0,np.log10(30),11)  # range should be fine, increase intervals when ready
+alphas = np.linspace(0,1,6)         # range IS fine, increase intervals when ready
+num_repeat = 5                      # could be 10
 batch_size = 50                     # no need to change I guess
 num_epochs = 2                      # could be changed... 5? 10? 20? write_logits.py uses 20.
 hidden_sizes = [800, 800]           # could be increased when ready...
 
 results_np = np.zeros([Ts.shape[0], alphas.shape[0]])
 results_np_w_repeat = np.zeros([Ts.shape[0], alphas.shape[0], num_repeat])
-results = []
 
 # Tensorflow stuff
 T_index = -1
@@ -78,7 +76,7 @@ for T in Ts:
             cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(y_out_soft), reduction_indices=[1]))
             cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(y_out_hard), reduction_indices=[1]))
             cross_entropy = ((T**2)*alpha*cross_entropy_soft) + ((1-alpha)*cross_entropy_hard)
-            train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
+            train_step = tf.train.AdamOptimizer(1e-5).minimize(cross_entropy)
             correct_prediction = tf.equal(tf.argmax(y_out_hard,1), tf.argmax(y_hard_,1))
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
             sess.run(tf.initialize_all_variables())
@@ -101,11 +99,6 @@ for T in Ts:
         avg_acc /= num_repeat
         print("T: %f, alpha: %f, test accuracy %g"%(T, alpha, avg_acc))
         results_np[T_index, alpha_index] = avg_acc
-        results.append((T, alpha, avg_acc))
-
-f = open('results.pickle','wb')
-pickle.dump(results,f)
-f.close()
 
 np.savetxt('results_np.csv', results_np, delimiter=",")
 np.savetxt('results_np_w_repeat.csv', results_np_w_repeat.reshape([Ts.shape[0], alphas.shape[0]*num_repeat]), delimiter=",")
