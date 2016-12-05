@@ -10,6 +10,7 @@ hidden_sizes = [1200, 1200] # NOT USING THIS.
 # CURRENT DEFAULT HIDDEN SIZES = [1024] followed by output layer of size [10]
 
 def weight_variable(shape):
+  print "SHAPE - ", shape
   initial = tf.truncated_normal(shape, stddev=0.1)
   return tf.Variable(initial)
 
@@ -35,6 +36,95 @@ def variable_summaries(var, name):
       tf.scalar_summary('max/' + name, tf.reduce_max(var))
       tf.scalar_summary('min/' + name, tf.reduce_min(var))
       tf.histogram_summary(name, var)
+
+def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu, operation=tf.matmul):
+    """Reusable code for making a simple neural net layer.
+    It does a matrix multiply, bias add, and then uses relu to nonlinearize.
+    It also sets up name scoping so that the resultant graph is easy to read,
+    and adds a number of summary ops.
+    """
+    # Adding a name scope ensures logical grouping of the layers in the graph.
+    with tf.name_scope(layer_name):
+        # Initialization
+        with tf.name_scope('weights'):
+            if operation is conv2d:
+                print "conv2d operation"
+                weights = weight_variable(input_dim)
+            else:
+                weights = weight_variable([input_dim, output_dim])
+            variable_summaries(weights, layer_name + '/weights')
+        with tf.name_scope('biases'):
+            biases = bias_variable([output_dim])
+            variable_summaries(biases, layer_name + '/biases')
+        # Operation
+        with tf.name_scope('Wx_plus_b'):
+            preactivate = operation(input_tensor, weights) + biases
+            tf.histogram_summary(layer_name + '/pre_activations', preactivate)
+        # Non linearity
+        if act is not None:
+            activations = act(preactivate, name='activation')
+            tf.histogram_summary(layer_name + '/activations', activations)
+
+        if act is not None:
+            return activations
+        return preactivate
+
+def launch_graph_and_train_with_summaries(lr=1e-4,kp=0.2,batch_size=50,num_epochs=20,sess=None):
+    if sess is None:
+        print "No session passed to function. ERROR."
+
+    with tf.name_scope('input'):
+        x = tf.placeholder(tf.float32, shape=[None, 784], name='x_input')
+        y_ = tf.placeholder(tf.float32, shape=[None, 10], name='y_input')
+
+    with tf.name_scope('input_reshape'):
+        x_image = tf.reshape(x, [-1,28,28,1])
+        tf.image_summary('input', x_image, 10)
+
+    # Conv1 + Maxpool Layer
+    h_conv1 = nn_layer(x_image,[5, 5, 1, 32],32,'conv1',act=tf.nn.relu,operation=conv2d)
+    h_pool1 = max_pool_2x2(h_conv1)
+
+    # Conv2 + Maxpool Layer
+    h_conv2 = nn_layer(h_pool1,[5, 5, 32, 64],64,'conv2',act=tf.nn.relu,operation=conv2d)
+    h_pool2 = max_pool_2x2(h_conv2)
+
+    # Flatten
+    h_pool2_flat = tf.reshape(h_pool2, [-1, 7*7*64])
+
+    # FC1 Layer
+    h_fc1 = nn_layer(h_pool2_flat,7*7*64,1024,'fc1',act=tf.nn.relu,operation=tf.matmul) 
+
+    # Dropout
+    keep_prob = tf.placeholder(tf.float32)
+    h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
+
+    # FC1 Layer
+    y_conv = nn_layer(h_fc1_drop,1024,10,'fc2',act=tf.nn.relu,operation=tf.matmul) 
+
+    # TRAINING
+    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(y_conv, y_))
+    train_step = tf.train.AdamOptimizer(lr).minimize(cross_entropy)
+    correct_prediction = tf.equal(tf.argmax(y_conv,1), tf.argmax(y_,1))
+    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+    sess.run(tf.initialize_all_variables())
+
+    ############CROSS VALIDATION!?!?!?!????????????? TECHNICALLY, SHOULDN'T USE THE TEST DATA FOR HP. IS THAT CHEATING 
+    ################################################ IN THIS CASE THOUGH, WHERE WE ONLY CARE ABOUT THE TRANSFER OF KNOWLEDGE?
+
+    iters_per_epoch = mnist.train.num_examples/batch_size
+    for i in range(num_epochs*iters_per_epoch):
+      batch = mnist.train.next_batch(batch_size,shuffle=False)
+      if i%5000 == 0:
+          train_accuracy = accuracy.eval(feed_dict={
+                  x:batch[0], y_: batch[1], keep_prob: 1.0})
+          print("step %d, training accuracy %g"%(i, train_accuracy))
+      train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: kp})
+
+    print("lr: %g, keep_prob: %g, test accuracy %g"%(lr,kp,accuracy_in_batches(mnist.validation, accuracy, x, y_, keep_prob, batch_size=batch_size)))
+    # print("lr: %g, keep_prob: %g, test accuracy %g"%(lr,kp,accuracy_in_batches(mnist.test, accuracy, x, y_, keep_prob, batch_size=batch_size)))
+    return x, y_conv, keep_prob
 
 def launch_graph_and_train(lr=1e-4,kp=0.2,batch_size=50,num_epochs=20,sess=None):
     if sess is None:
@@ -169,10 +259,10 @@ def write_best_logits(sess=None):
     lr = 0.000517947 # 5.18e-4
     kp = 0.2
     batch_size = 50
-    num_epochs = 2#20 
+    num_epochs = 20 
     iters_per_epoch = mnist.train.num_examples/batch_size
 
-    x, y_conv, keep_prob = launch_graph_and_train(lr=lr,kp=kp,batch_size=batch_size,num_epochs=num_epochs,sess=sess)
+    x, y_conv, keep_prob = launch_graph_and_train_with_summaries(lr=lr,kp=kp,batch_size=batch_size,num_epochs=num_epochs,sess=sess)
 
 
     # WRITE THE LOGITS AFTER TUNING-----------------------------  
@@ -186,8 +276,6 @@ def write_best_logits(sess=None):
 
     np.savetxt('logits_mnist_tuned3_52errors.csv', y_conv_np_all, delimiter = ', ')
     # to read, y_read = np.loadtxt('<filename.txt>',delimiter=', ')
-
-
 
 # Uncomment for fine tuning ---------------------------------------------------
 # fine_tune()
