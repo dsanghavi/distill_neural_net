@@ -3,14 +3,16 @@ import numpy as np
 from tensorflow.examples.tutorials.mnist import input_data
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
-logits_cumbersome = np.loadtxt('Data/logits_mnist1.txt')
+logits_cumbersome = np.loadtxt('Data/logits_mnist_tuned2.csv', delimiter=', ')
 
 batch_size = 50
+
+# TRAINING SET
 iters_per_epoch = mnist.train.num_examples/batch_size
 
-xs = []
-ys = []
-logits = []
+train_xs = []
+train_ys = []
+train_logits = []
 for i in range(iters_per_epoch):
     batch = mnist.train.next_batch(batch_size,shuffle=False)
     x_batch = batch[0]
@@ -19,14 +21,13 @@ for i in range(iters_per_epoch):
 
     rows_where_y_is_not_3 = (y_batch[:,3]==0)
 
-    xs.append(x_batch[rows_where_y_is_not_3, :])
-    ys.append(y_batch[rows_where_y_is_not_3, :])
-    logits.append(logits_batch[rows_where_y_is_not_3, :])
+    train_xs.append(x_batch[rows_where_y_is_not_3, :])
+    train_ys.append(y_batch[rows_where_y_is_not_3, :])
+    train_logits.append(logits_batch[rows_where_y_is_not_3, :])
+train_xs = np.concatenate(train_xs, axis=0)
+train_ys = np.concatenate(train_ys, axis=0)
+train_logits = np.concatenate(train_logits, axis=0)
 
-xs = np.concatenate(xs,axis=0)
-ys = np.concatenate(ys,axis=0)
-logits = np.concatenate(logits,axis=0)
-
-np.savetxt('Data/mnist_wo_3_features.csv', xs, delimiter=', ')
-np.savetxt('Data/mnist_wo_3_labels.csv', ys, fmt='%d', delimiter=', ')
-np.savetxt('Data/mnist_wo_3_logits.csv', logits, delimiter=', ')
+np.savetxt('Data/mnist_wo_3_train_features.csv', train_xs, delimiter=', ')
+np.savetxt('Data/mnist_wo_3_train_labels.csv', train_ys, fmt='%d', delimiter=', ')
+np.savetxt('Data/mnist_wo_3_train_logits.csv', train_logits, delimiter=', ')
