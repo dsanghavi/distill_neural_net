@@ -47,7 +47,6 @@ def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu, op
         # Initialization
         with tf.name_scope('weights'):
             if operation is conv2d:
-                print "conv2d operation"
                 weights = weight_variable(input_dim)
             else:
                 weights = weight_variable([input_dim, output_dim])
