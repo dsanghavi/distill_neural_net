@@ -48,9 +48,9 @@ def accuracy_in_batches_alt(features, labels, accuracy_func, x, y_, keep_prob=No
 def softmax_T(logits, T, tensor=False):
     # train_logits dim = (N, C), T = float
     if tensor:
-        l1 = tf.minimum(tf.exp(logits / T), 1e12)
+        l1 = tf.exp(logits / T)
         l1 /= tf.maximum(tf.reduce_sum(l1, reduction_indices=1, keep_dims=True), 1e-12)
     else:
-        l1 = np.minimum(np.exp(logits / T), 1e12)
+        l1 = np.exp(logits / T)
         l1 /= np.maximum(np.sum(l1, axis=1, keepdims=True), 1e-12)
     return l1
