@@ -41,14 +41,19 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs):
     y_out_soft = hf.softmax_T(y_out, T, tensor=True)    # temperature softmax
     y_out_hard = hf.softmax_T(y_out, 1, tensor=True)         # temperature=1 softmax
 
-    cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(tf.maximum(y_soft_, 1e-12) * tf.log(tf.maximum(y_out_soft, 1e-12)), reduction_indices=[1]))
-    cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(tf.maximum(y_hard_, 1e-12) * tf.log(tf.maximum(y_out_hard, 1e-12)), reduction_indices=[1]))
-    cross_entropy = ((T**2)*alpha*tf.minimum(tf.maximum(cross_entropy_soft, 1e-12), 1e12)) + ((1-alpha)*tf.minimum(tf.maximum(cross_entropy_hard, 1e-12), 1e12))
-    global_step = tf.Variable(0, trainable=False)
-    rate = tf.train.exponential_decay(lr, global_step, 1100, 0.9)
-    train_step = tf.train.AdamOptimizer(rate).minimize(cross_entropy, global_step=global_step)
+    cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_, 1e-12 * tf.log(tf.maximum(y_out_soft, 1e-12)), reduction_indices=[1]))
+    cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_, 1e-12 * tf.log(tf.maximum(y_out_hard, 1e-12)), reduction_indices=[1]))
+    cross_entropy = ((T**2)*alpha*cross_entropy_soft) + ((1-alpha)*cross_entropy_hard)
+
+    # train_step = tf.train.AdamOptimizer(lr).minimize(cross_entropy)
+    train_step = tf.train.AdamOptimizer(lr)
+    grads_and_vars = train_step.compute_gradients(cross_entropy, [W1,b1,W2,b2,W3,b3])
+    capped_grads_and_vars = [(tf.minimum(tf.maximum(gv[0], 1e-8), 1e8), gv[1]) for gv in grads_and_vars]
+    train_step.apply_gradients(capped_grads_and_vars)
+
     correct_prediction = tf.equal(tf.argmax(y_out_hard,1), tf.argmax(y_hard_,1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
     sess.run(tf.global_variables_initializer())
 
     iters_per_epoch = mnist.train.num_examples/batch_size
