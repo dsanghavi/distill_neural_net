@@ -56,6 +56,35 @@ def softmax_T(logits, T, tensor=False):
         l1 /= np.maximum(np.sum(l1, axis=1, keepdims=True), 1e-12)
     return l1
 
+def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu, operation=tf.matmul):
+    """Reusable code for making a simple neural net layer.
+    It does a matrix multiply, bias add, and then uses relu to nonlinearize.
+    It also sets up name scoping so that the resultant graph is easy to read,
+    and adds a number of summary ops.
+    """
+    # Adding a name scope ensures logical grouping of the layers in the graph.
+    with tf.name_scope(layer_name):
+        # Initialization
+        with tf.name_scope('weights'):
+            if operation is conv2d:
+                weights = weight_variable(input_dim)
+            else:
+                weights = weight_variable([input_dim, output_dim])
+            variable_summaries(weights, layer_name + '/weights')
+        with tf.name_scope('biases'):
+            biases = bias_variable([output_dim])
+            variable_summaries(biases, layer_name + '/biases')
+        # Operation
+        with tf.name_scope('Wx_plus_b'):
+            preactivate = operation(input_tensor, weights) + biases
+            tf.histogram_summary(layer_name + '/pre_activations', preactivate)
+        # Non linearity
+        activations = act(preactivate, name='activation')
+        tf.histogram_summary(layer_name + '/activations', activations)
+
+        return activations
+
+
 class Logger(object):
     def __init__(self, f_log_name):
         self.terminal = sys.stdout

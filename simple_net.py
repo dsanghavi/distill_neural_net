@@ -63,28 +63,60 @@ mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs):
     iters_per_epoch = mnist.train.num_examples / batch_size
 
-    x = tf.placeholder(tf.float32, shape=[None, 784])
-    y_soft_ = tf.placeholder(tf.float32, shape=[None, 10])
-    y_hard_ = tf.placeholder(tf.float32, shape=[None, 10])
+    with tf.name_scope('input'):
+        x = tf.placeholder(tf.float32, shape=[None, 784])
+        y_soft_ = tf.placeholder(tf.float32, shape=[None, 10])
+        y_hard_ = tf.placeholder(tf.float32, shape=[None, 10])
 
-    W1 = hf.weight_variable([28 * 28, hidden_sizes[0]])
-    b1 = hf.bias_variable([hidden_sizes[0]])
-    h1 = tf.nn.relu(tf.matmul(x, W1) + b1)
+    # W1 = hf.weight_variable([28 * 28, hidden_sizes[0]])
+    # b1 = hf.bias_variable([hidden_sizes[0]])
+    # h1 = tf.nn.relu(tf.matmul(x, W1) + b1)
 
-    W2 = hf.weight_variable([hidden_sizes[0], hidden_sizes[1]])
-    b2 = hf.bias_variable([hidden_sizes[1]])
-    h2 = tf.nn.relu(tf.matmul(h1, W2) + b2)
+    h1 = hf.nn_layer(x,28*28,hidden_sizes[0],'fc1',act=tf.nn.relu,operation=tf.matmul) 
 
-    W3 = hf.weight_variable([hidden_sizes[1], 10])
-    b3 = hf.bias_variable([10])
-    y_out = tf.matmul(h2, W3) + b3
+
+    # W2 = hf.weight_variable([hidden_sizes[0], hidden_sizes[1]])
+    # b2 = hf.bias_variable([hidden_sizes[1]])
+    # h2 = tf.nn.relu(tf.matmul(h1, W2) + b2)
+
+    h2 = hf.nn_layer(h1,hidden_sizes[0],hidden_sizes[1],'fc2',act=tf.nn.relu,operation=tf.matmul) 
+
+
+    # W3 = hf.weight_variable([hidden_sizes[1], 10])
+    # b3 = hf.bias_variable([10])
+    # y_out = tf.matmul(h2, W3) + b3
+    
+    y_out = hf.nn_layer(h2,hidden_sizes[1],10,'raw out',act=tf.identity,operation=tf.matmul) 
+    
+
     y_out_soft = hf.softmax_T(y_out, T, tensor=True)    # temperature softmax
     y_out_hard = hf.softmax_T(y_out, 1, tensor=True)         # temperature=1 softmax
 
-    cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(tf.maximum(y_out_soft, 1e-12)), reduction_indices=[1]))
-    cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(tf.maximum(y_out_hard, 1e-12)), reduction_indices=[1]))
-    cross_entropy = ((T**2)*alpha*cross_entropy_soft) + ((1-alpha)*cross_entropy_hard)
+    # cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(tf.maximum(y_out_soft, 1e-12)), reduction_indices=[1]))
+    # cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(tf.maximum(y_out_hard, 1e-12)), reduction_indices=[1]))
+    # cross_entropy = ((T**2)*alpha*cross_entropy_soft) + ((1-alpha)*cross_entropy_hard)
     # cross_entropy = (alpha * cross_entropy_soft) + ((1 - alpha) * cross_entropy_hard)
+
+#Shifted below - train_step computation
+
+    # correct_prediction = tf.equal(tf.argmax(y_out_hard,1), tf.argmax(y_hard_,1))
+    # accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+
+    # -------------
+    with tf.name_scope('cross_entropy_soft'):
+        with tf.name_scope('total'):
+            cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(tf.maximum(y_out_soft, 1e-12)), reduction_indices=[1]))
+        tf.scalar_summary('cross entropy soft', cross_entropy_soft)
+
+    with tf.name_scope('cross_entropy_hard'):
+        with tf.name_scope('total'):
+            cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(tf.maximum(y_out_hard, 1e-12)), reduction_indices=[1]))
+        tf.scalar_summary('cross entropy hard', cross_entropy_hard)
+
+    with tf.name_scope('cross_entropy'):
+        cross_entropy = ((T**2)*alpha*cross_entropy_soft) + ((1-alpha)*cross_entropy_hard)
+        tf.scalar_summary('cross entropy', cross_entropy)
 
     # train_step = tf.train.AdamOptimizer(lr).minimize(cross_entropy)
     global_step = tf.Variable(0, trainable=False)
@@ -94,8 +126,20 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs):
     capped_grads_and_vars = [(tf.sign(gv[0])*tf.minimum(tf.maximum(tf.abs(gv[0]), 1e-8), 1e8), gv[1]) for gv in grads_and_vars]
     train_step = train_step_opt.apply_gradients(capped_grads_and_vars, global_step=global_step)
 
-    correct_prediction = tf.equal(tf.argmax(y_out_hard,1), tf.argmax(y_hard_,1))
-    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    with tf.name_scope('accuracy'):
+        with tf.name_scope('correct_prediction'):
+            correct_prediction = tf.equal(tf.argmax(y_out_hard, 1), tf.argmax(y_hard_, 1))
+        with tf.name_scope('accuracy'):
+            accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        tf.scalar_summary('accuracy', accuracy)
+
+    # Merge all the summaries and write them out to /tmp/mnist_logs (by default)
+    merged = tf.merge_all_summaries()
+    train_writer = tf.train.SummaryWriter('tensorboard_logs/mnist_simple_logs' + '/train',
+                                        sess.graph)
+    # Test writer actually logs validation accuracies
+    val_writer = tf.train.SummaryWriter('tensorboard_logs/mnist_simple_logs' + '/val')
+
 
     sess.run(tf.initialize_all_variables())
 
@@ -110,11 +154,25 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs):
         #                           y_hard_: batch[1]}):
         #         print tf.reduce_max(gv[0]).eval(), tf.reduce_min(gv[0]).eval(), tf.reduce_mean(gv[0]).eval()
         # if i%1000 == 0:
-        #     train_accuracy = accuracy.eval(feed_dict={x:batch[0], y_hard_: batch[1]})
+        #     # train_accuracy = accuracy.eval(feed_dict={x:batch[0], y_hard_: batch[1]})
+        #     # print("step %d, training accuracy %g"%(i, train_accuracy))
+            
+        #     summary, train_accuracy = sess.run([merged,accuracy],feed_dict={x:batch[0], y_hard_: batch[1]}) 
+        #     val_writer.add_summary(summary, i)
         #     print("step %d, training accuracy %g"%(i, train_accuracy))
+
         train_step.run(feed_dict={x: batch[0],
                                   y_soft_: y_soft[(i%iters_per_epoch)*batch_size:((i%iters_per_epoch)+1)*batch_size],
                                   y_hard_: batch[1]})
+
+        summary, _ = sess.run([merged, train_step],feed_dict={x: batch[0], 
+                                                              y_soft_: y_soft[(i%iters_per_epoch)*batch_size:((i%iters_per_epoch)+1)*batch_size],
+                                                              y_hard_: batch[1]})
+        train_writer.add_summary(summary, i)
+
+    train_writer.close()
+    val_writer.close()
+
 
     return x, y_hard_, accuracy
 
