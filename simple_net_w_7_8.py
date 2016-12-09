@@ -1,16 +1,50 @@
 import tensorflow as tf
 import numpy as np
 import helper_functions as hf
+import sys
+import os
+import time
+import datetime
 
 
+################################################################
 # RUN PARAMETERS
+lr = 1e-4                  # best_lr, comes from simple_net
 T = 4                      # best_T, comes from simple_net
 alpha = 0.6                # best_alpha, comes from simple_net
-num_repeat = 5             # could be 10
-batch_size = 50            # no need to change I guess
-num_epochs = 2             # could be changed... 5? 10? 20? write_logits.py uses 20.
-hidden_sizes = [800, 800]  # could be increased when ready...
+num_repeat = 5
+batch_size = 50
+num_epochs = 10
+hidden_sizes = [800, 800]
 
+
+################################################################
+# !!! SHOULD REVERSE THIS AT THE END OF THIS SCRIPT !!!
+# Set up printing out a log (redirects all prints to the file)
+orig_stdout = sys.stdout
+f_log_name = 'Results/' + os.path.basename(__file__) \
+                        + '_' \
+                        + datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d_%H%M%S') \
+                        + '.log'
+logger = hf.Logger(f_log_name)
+sys.stdout = logger
+
+
+################################################################
+# LOG THE RUN PARAMETERS
+print '\nRUN PARAMETERS'
+print 'lr =', lr
+print 'T =', T
+print 'alpha =', alpha
+print 'num_repeat =', num_repeat
+print 'batch_size =', batch_size
+print 'num_epochs =', num_epochs
+print 'hidden_sizes =', hidden_sizes
+print '\n'
+
+
+################################################################
+# LOAD DATA
 
 # Load data
 train_features    = np.loadtxt('Data/mnist_w_7_8_train_features.csv', delimiter=', ')
@@ -18,25 +52,22 @@ train_hard_labels = np.loadtxt('Data/mnist_w_7_8_train_labels.csv', dtype='int',
 train_soft_labels = np.loadtxt('Data/mnist_w_7_8_train_logits.csv', delimiter=', ')
 
 
-# train small neural net ----------------------------------------------------------
+################################################################
+# NEURAL NETWORK
+print '\nTraining the model...'
+
+iters_per_epoch = np.ceil(float(train_features.shape[0]) / batch_size).astype(int)
 
 tf.reset_default_graph()
-
 sess = tf.InteractiveSession()
 
 x = tf.placeholder(tf.float32, shape=[None, 784])
 y_soft_ = tf.placeholder(tf.float32, shape=[None, 10])
 y_hard_ = tf.placeholder(tf.float32, shape=[None, 10])
 
-#Layers
 W1 = hf.weight_variable([28 * 28, hidden_sizes[0]])
 b1 = hf.bias_variable([hidden_sizes[0]])
-
-# x_image = tf.reshape(x, [-1,28*28]) # maybe as sanity check
 h1 = tf.nn.relu(tf.matmul(x, W1) + b1)
-
-# keep_prob = tf.placeholder(tf.float32)
-# h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
 
 W2 = hf.weight_variable([hidden_sizes[0], hidden_sizes[1]])
 b2 = hf.bias_variable([hidden_sizes[1]])
@@ -51,12 +82,19 @@ y_out_hard = hf.softmax_T(y_out, 1, tensor=True)         # temperature=1 softmax
 cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(y_out_soft), reduction_indices=[1]))
 cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(y_out_hard), reduction_indices=[1]))
 cross_entropy = ((T**2)*alpha*cross_entropy_soft) + ((1-alpha)*cross_entropy_hard)
-train_step = tf.train.AdamOptimizer(1e-5).minimize(cross_entropy)
+
+global_step = tf.Variable(0, trainable=False)
+learning_rate = tf.train.exponential_decay(lr, global_step, iters_per_epoch, 0.9, staircase=True)
+train_step_opt = tf.train.AdamOptimizer(learning_rate)
+grads_and_vars = train_step_opt.compute_gradients(cross_entropy, [W1,b1,W2,b2,W3,b3])
+capped_grads_and_vars = [(tf.sign(gv[0])*tf.minimum(tf.maximum(tf.abs(gv[0]), 1e-8), 1e8), gv[1]) for gv in grads_and_vars]
+train_step = train_step_opt.apply_gradients(capped_grads_and_vars, global_step=global_step)
+
 correct_prediction = tf.equal(tf.argmax(y_out_hard,1), tf.argmax(y_hard_,1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
 sess.run(tf.global_variables_initializer())
 
-iters_per_epoch = np.ceil(float(train_features.shape[0]) / batch_size).astype(int)
 for i in range(num_epochs*iters_per_epoch):
     start_index = (i % iters_per_epoch) * batch_size
     end_index = ((i % iters_per_epoch) + 1) * batch_size
@@ -89,3 +127,10 @@ print 'On test set:       %.4f' % test_acc
 ################################################################
 
 sess.close()
+
+
+################################################################
+# !!! RESETTING STDOUT LOGGING !!!
+# Stop redirecting pring out to log
+logger.close_log()
+sys.stdout = orig_stdout
