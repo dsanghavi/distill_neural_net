@@ -135,10 +135,11 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs):
 
     # Merge all the summaries and write them out to /tmp/mnist_logs (by default)
     merged = tf.merge_all_summaries()
-    train_writer = tf.train.SummaryWriter('tensorboard_logs/mnist_simple_logs_' + datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d_%H%M%S') + '/train',
+    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d_%H%M%S')
+    train_writer = tf.train.SummaryWriter('tensorboard_logs/mnist_simple_logs_' + timestamp + '/train',
                                         sess.graph)
     # Test writer actually logs validation accuracies
-    val_writer = tf.train.SummaryWriter('tensorboard_logs/mnist_simple_logs_' + datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d_%H%M%S') + '/val')
+    val_writer = tf.train.SummaryWriter('tensorboard_logs/mnist_simple_logs_' + timestamp + '/val')
 
 
     sess.run(tf.initialize_all_variables())
