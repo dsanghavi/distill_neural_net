@@ -27,7 +27,7 @@ hidden_sizes = [800, 800]           # could be increased when ready...
 orig_stdout = sys.stdout
 f_log_name = 'Results/' + os.path.basename(__file__) \
                         + '_' \
-                        + datetime.datetime.fromtimestamp(time.time()).strftime('%Y_%m_%d_%H_%M_%S') \
+                        + datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d_%H%M%S') \
                         + '.log'
 logger = hf.Logger(f_log_name)
 sys.stdout = logger
@@ -72,21 +72,21 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs):
     # b1 = hf.bias_variable([hidden_sizes[0]])
     # h1 = tf.nn.relu(tf.matmul(x, W1) + b1)
 
-    h1 = hf.nn_layer(x,28*28,hidden_sizes[0],'fc1',act=tf.nn.relu,operation=tf.matmul) 
+    h1, W1, b1 = hf.nn_layer(x,28*28,hidden_sizes[0],'fc1',act=tf.nn.relu,operation=tf.matmul)
 
 
     # W2 = hf.weight_variable([hidden_sizes[0], hidden_sizes[1]])
     # b2 = hf.bias_variable([hidden_sizes[1]])
     # h2 = tf.nn.relu(tf.matmul(h1, W2) + b2)
 
-    h2 = hf.nn_layer(h1,hidden_sizes[0],hidden_sizes[1],'fc2',act=tf.nn.relu,operation=tf.matmul) 
+    h2, W2, b2 = hf.nn_layer(h1,hidden_sizes[0],hidden_sizes[1],'fc2',act=tf.nn.relu,operation=tf.matmul)
 
 
     # W3 = hf.weight_variable([hidden_sizes[1], 10])
     # b3 = hf.bias_variable([10])
     # y_out = tf.matmul(h2, W3) + b3
     
-    y_out = hf.nn_layer(h2,hidden_sizes[1],10,'raw out',act=tf.identity,operation=tf.matmul) 
+    y_out, W3, b3 = hf.nn_layer(h2,hidden_sizes[1],10,'out',act=tf.identity,operation=tf.matmul)
     
 
     y_out_soft = hf.softmax_T(y_out, T, tensor=True)    # temperature softmax
@@ -135,10 +135,10 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs):
 
     # Merge all the summaries and write them out to /tmp/mnist_logs (by default)
     merged = tf.merge_all_summaries()
-    train_writer = tf.train.SummaryWriter('tensorboard_logs/mnist_simple_logs' + '/train',
+    train_writer = tf.train.SummaryWriter('tensorboard_logs/mnist_simple_logs_' + datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d_%H%M%S') + '/train',
                                         sess.graph)
     # Test writer actually logs validation accuracies
-    val_writer = tf.train.SummaryWriter('tensorboard_logs/mnist_simple_logs' + '/val')
+    val_writer = tf.train.SummaryWriter('tensorboard_logs/mnist_simple_logs_' + datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d_%H%M%S') + '/val')
 
 
     sess.run(tf.initialize_all_variables())
@@ -272,3 +272,4 @@ print 'On test set:       %.4f' % avg_test_acc
 # Stop redirecting pring out to log
 logger.close_log()
 sys.stdout = orig_stdout
+

@@ -56,6 +56,18 @@ def softmax_T(logits, T, tensor=False):
         l1 /= np.maximum(np.sum(l1, axis=1, keepdims=True), 1e-12)
     return l1
 
+def variable_summaries(var, name):
+    """Attach a lot of summaries to a Tensor."""
+    with tf.name_scope('summaries'):
+        mean = tf.reduce_mean(var)
+        tf.scalar_summary('mean/' + name, mean)
+        with tf.name_scope('stddev'):
+            stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+        tf.scalar_summary('stddev/' + name, stddev)
+        tf.scalar_summary('max/' + name, tf.reduce_max(var))
+        tf.scalar_summary('min/' + name, tf.reduce_min(var))
+        tf.histogram_summary(name, var)
+
 def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu, operation=tf.matmul):
     """Reusable code for making a simple neural net layer.
     It does a matrix multiply, bias add, and then uses relu to nonlinearize.
@@ -82,23 +94,48 @@ def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu, op
         activations = act(preactivate, name='activation')
         tf.histogram_summary(layer_name + '/activations', activations)
 
-        return activations
+        return activations, weights, biases
 
 
 class Logger(object):
+    """
+    Logger class to print stdout messages into a log file while displaying them in stdout also.
+    Pass filename to which to save when instantiating.
+    """
     def __init__(self, f_log_name):
+        """
+        Initialization.
+        :param f_log_name: file path to which to write the logs
+        """
         self.terminal = sys.stdout
         self.log = open(f_log_name, 'w')
 
     def write(self, message):
+        """
+        Actual logging operations.
+        :param message: The message to log.
+        :return: Nothing
+        """
         self.terminal.write(message)
         self.log.write(message)
 
     def flush(self):
+        """
+        Exists only to satisfy Python 3
+        :return: Nothing
+        """
         pass
 
     def close_log(self):
+        """
+        Closes the opened log file.
+        :return:
+        """
         self.log.close()
 
     def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Exists to close the log file in case user terminated the script, etc., and close_log is not explicitly called.
+        """
         self.close_log()
+
