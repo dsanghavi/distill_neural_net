@@ -24,6 +24,7 @@ for i in range(iters_per_epoch):
     train_xs.append(x_batch[rows_where_y_is_not_3, :])
     train_ys.append(y_batch[rows_where_y_is_not_3, :])
     train_logits.append(logits_batch[rows_where_y_is_not_3, :])
+
 train_xs = np.concatenate(train_xs, axis=0)
 train_ys = np.concatenate(train_ys, axis=0)
 train_logits = np.concatenate(train_logits, axis=0)
