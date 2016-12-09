@@ -7,7 +7,16 @@ from tensorflow.examples.tutorials.mnist import input_data
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
 hidden_sizes = [1200, 1200] # NOT USING THIS. 
+use_ensemble = True
+num_models_in_ensemble = 10
 # CURRENT DEFAULT HIDDEN SIZES = [1024] followed by output layer of size [10]
+
+#######################
+#TODO: WRITE LOGITS FOR TOP N NETWORKS. CAN EASILY USE ENSEMBLES AS ANOTHER EXPERIMENT.
+#TODO: PRINT TIME TAKEN TO DECODE.
+#TODO: MAYBE IF TIME PERMITS-PREPROCESS DATA FOR EACH CLASS AS ONE VS ALL FOR SPECIALIST NETS.
+#TO REPORT: Distillation is a very strong form of regularizer
+#######################
 
 def weight_variable(shape):
   initial = tf.truncated_normal(shape, stddev=0.1)
@@ -36,33 +45,35 @@ def variable_summaries(var, name):
       tf.scalar_summary('min/' + name, tf.reduce_min(var))
       tf.histogram_summary(name, var)
 
-def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu, operation=tf.matmul):
-    """Reusable code for making a simple neural net layer.
-    It does a matrix multiply, bias add, and then uses relu to nonlinearize.
-    It also sets up name scoping so that the resultant graph is easy to read,
-    and adds a number of summary ops.
-    """
-    # Adding a name scope ensures logical grouping of the layers in the graph.
-    with tf.name_scope(layer_name):
-        # Initialization
-        with tf.name_scope('weights'):
-            if operation is conv2d:
-                weights = weight_variable(input_dim)
-            else:
-                weights = weight_variable([input_dim, output_dim])
-            variable_summaries(weights, layer_name + '/weights')
-        with tf.name_scope('biases'):
-            biases = bias_variable([output_dim])
-            variable_summaries(biases, layer_name + '/biases')
-        # Operation
-        with tf.name_scope('Wx_plus_b'):
-            preactivate = operation(input_tensor, weights) + biases
-            tf.histogram_summary(layer_name + '/pre_activations', preactivate)
-        # Non linearity
-        activations = act(preactivate, name='activation')
-        tf.histogram_summary(layer_name + '/activations', activations)
 
-        return activations
+#### SHIFTED TO helper_functions.py
+# def nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.relu, operation=tf.matmul):
+#     """Reusable code for making a simple neural net layer.
+#     It does a matrix multiply, bias add, and then uses relu to nonlinearize.
+#     It also sets up name scoping so that the resultant graph is easy to read,
+#     and adds a number of summary ops.
+#     """
+#     # Adding a name scope ensures logical grouping of the layers in the graph.
+#     with tf.name_scope(layer_name):
+#         # Initialization
+#         with tf.name_scope('weights'):
+#             if operation is conv2d:
+#                 weights = weight_variable(input_dim)
+#             else:
+#                 weights = weight_variable([input_dim, output_dim])
+#             variable_summaries(weights, layer_name + '/weights')
+#         with tf.name_scope('biases'):
+#             biases = bias_variable([output_dim])
+#             variable_summaries(biases, layer_name + '/biases')
+#         # Operation
+#         with tf.name_scope('Wx_plus_b'):
+#             preactivate = operation(input_tensor, weights) + biases
+#             tf.histogram_summary(layer_name + '/pre_activations', preactivate)
+#         # Non linearity
+#         activations = act(preactivate, name='activation')
+#         tf.histogram_summary(layer_name + '/activations', activations)
+
+#         return activations
 
 def launch_graph_and_train_with_summaries(lr=1e-4,kp=0.2,batch_size=50,num_epochs=20,sess=None):
     if sess is None:
@@ -183,7 +194,8 @@ def launch_graph_and_train(lr=1e-4,kp=0.2,batch_size=50,num_epochs=20,sess=None)
     y_conv = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
 
     # TRAINING
-    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(y_conv, y_))
+    softmax = tf.nn.softmax_cross_entropy_with_logits(y_conv, y_) # should be dim 10
+    cross_entropy = tf.reduce_mean(softmax)
     train_step = tf.train.AdamOptimizer(lr).minimize(cross_entropy)
     correct_prediction = tf.equal(tf.argmax(y_conv,1), tf.argmax(y_,1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
@@ -219,6 +231,7 @@ def fine_tune():
     # keep_probs = np.arange(5)/5.0
     keep_probs = [0.1,0.2,0.3,0.4,0.5]
 
+    results = {}
     for lr in lrs:
         for kp in keep_probs:
             tf.reset_default_graph()
@@ -230,11 +243,13 @@ def fine_tune():
                 best_lr = lr
                 best_kp = kp
 
+            results[(lr,kp)] = val_acc
+
             sess.close()
 
-    return best_lr, best_kp
+    return best_lr, best_kp, results
     
-def write_best_logits(sess=None, lr=0.000517947, kp=0.2):
+def write_best_logits(sess=None, lr=0.000517947, kp=0.2, file_postfix='ensemble0'):
     # # lr = 0.00019307 # 1.93e-4
     # lr = 0.000848343 # 8.48e-4
     # lr = 0.000517947 # 5.18e-4
@@ -254,17 +269,46 @@ def write_best_logits(sess=None, lr=0.000517947, kp=0.2):
 
     y_conv_np_all = np.concatenate(y_conv_nps,axis=0) # new shape = (55000, 10)
 
-    np.savetxt('logits_mnist_tuned4.csv', y_conv_np_all, delimiter = ', ')
+    np.savetxt('logits_mnist_tuned_'+file_postfix+'.csv', y_conv_np_all, delimiter = ', ')
     # to read, y_read = np.loadtxt('<filename.txt>',delimiter=', ')
 
     test_accuracy = accuracy_in_batches(mnist.test, accuracy_tf, x, y_, batch_size=batch_size)
-    print '\n\nTEST ACCURACY =', test_accuracy
+    print '\nTEST ACCURACY '+file_postfix+' \n', test_accuracy
+
+    if use_ensemble:
+        # Store test logits for overall evaluation
+        y_conv_test_nps = [] # Store numpy arrays, like above
+        for i in range(mnist.test.num_examples/batch_size):
+            batch = mnist.train.next_batch(batch_size,shuffle=False)
+            y_conv_test_nps.append(y_conv.eval(feed_dict = {x: batch[0], keep_prob: 1.0})) # .eval() Only valid for an Interactive Session?
+        y_conv_test_np_all = np.concatenate(y_conv_test_nps,axis=0) # new shape = (10000, 10)
+        votes = (y_conv_test_np_all.T>np.max(y_conv_test_np_all,axis=1)).T
+
+        return votes
+
+
 
 # Uncomment for fine tuning ---------------------------------------------------
-best_lr, best_kp = fine_tune()
+best_lr, best_kp, results = fine_tune()
 
 # AFTER FINE-TUNING, WRITE THE BEST LOGITS ------------------------------------
-tf.reset_default_graph()
-sess = tf.InteractiveSession()
-write_best_logits(sess=sess, lr=best_lr, kp=best_kp)
-sess.close()
+if use_ensemble:
+    votes_total = np.zeros([mnist.test.num_examples,10])
+    sorted_results = sorted(results,key=lambda x: -results[x])
+    for i in range(num_models_in_ensemble):
+        tf.reset_default_graph()
+        sess = tf.InteractiveSession()
+        votes = write_best_logits(sess=sess, lr=sorted_results[0][0], kp=sorted_results[0][1],file_postfix='ensemble'+str(i)) # ADD FILENAME POSTFIX VARIABLE
+        votes_total += votes # votes.shape 
+        sess.close()
+    
+    predictions = (votes_total.T>np.max(votes_total,axis=1)).T
+    # ACCURACY CALCULATION
+    correct = np.sum(predictions*mnist.test.labels) # Each of dim (10000,10)
+    print "\nFINAL TEST ACCURACY FOR ENSEMBLE = ",correct/mnist.test.num_examples
+
+else:
+    tf.reset_default_graph()
+    sess = tf.InteractiveSession()
+    write_best_logits(sess=sess, lr=best_lr, kp=best_kp,file_postfix='')
+    sess.close()
