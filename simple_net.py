@@ -15,7 +15,7 @@ alphas, step = np.linspace(0,1,6,retstep=True)
 # lrs = np.array([1e-3])
 # Ts = np.array([2.1147])
 # alphas = np.array([0.50])
-num_repeat = 5                      # could be 10?
+num_repeat = 1                      # could be 10?
 batch_size = 50
 num_epochs = 5                      # could be changed... 5? 10? 20? write_logits.py uses 20.
 hidden_sizes = [800, 800]           # could be increased when ready...
@@ -142,7 +142,7 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs):
     val_writer = tf.train.SummaryWriter('tensorboard_logs/mnist_simple_logs_' + timestamp + '/val')
 
 
-    sess.run(tf.initialize_all_variables())
+    sess.run(tf.global_variables_initializer())
 
     for i in range(num_epochs*iters_per_epoch):
         batch = mnist.train.next_batch(batch_size,shuffle=False)
@@ -155,8 +155,8 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs):
         #                           y_hard_: batch[1]}):
         #         print tf.reduce_max(gv[0]).eval(), tf.reduce_min(gv[0]).eval(), tf.reduce_mean(gv[0]).eval()
         # if i%1000 == 0:
-        #     # train_accuracy = accuracy.eval(feed_dict={x:batch[0], y_hard_: batch[1]})
-        #     # print("step %d, training accuracy %g"%(i, train_accuracy))
+        #     train_accuracy = accuracy.eval(feed_dict={x:batch[0], y_hard_: batch[1]})
+        #     print("step %d, training accuracy %g"%(i, train_accuracy))
             
         #     summary, train_accuracy = sess.run([merged,accuracy],feed_dict={x:batch[0], y_hard_: batch[1]}) 
         #     val_writer.add_summary(summary, i)
