@@ -4,9 +4,12 @@ import helper_functions as hf
 
 
 # RUN PARAMETERS
-lrs = np.logspace(-7,-2,11)
-Ts = np.logspace(np.log10(1),np.log10(20),11)
-alphas, step = np.linspace(0,1,6,retstep=True)
+# lrs = np.logspace(-7,-2,6)
+# Ts = np.logspace(np.log10(1),np.log10(20),5)
+# alphas, step = np.linspace(0,1,5,retstep=True)
+lrs = np.array([1e-3])
+Ts = np.array([2.1147])
+alphas = np.array([0.50])
 num_repeat = 1                      # could be 10?
 batch_size = 50
 num_epochs = 2                      # could be changed... 5? 10? 20? write_logits.py uses 20.
@@ -44,21 +47,30 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs):
     cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(tf.maximum(y_out_soft, 1e-12)), reduction_indices=[1]))
     cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(tf.maximum(y_out_hard, 1e-12)), reduction_indices=[1]))
     cross_entropy = ((T**2)*alpha*cross_entropy_soft) + ((1-alpha)*cross_entropy_hard)
+    # cross_entropy = ((T**2)alpha * cross_entropy_soft) + ((1 - alpha) * cross_entropy_hard)
 
     # train_step = tf.train.AdamOptimizer(lr).minimize(cross_entropy)
     train_step_opt = tf.train.AdamOptimizer(lr)
     grads_and_vars = train_step_opt.compute_gradients(cross_entropy, [W1,b1,W2,b2,W3,b3])
-    capped_grads_and_vars = [(tf.minimum(tf.maximum(gv[0], 1e-8), 1e8), gv[1]) for gv in grads_and_vars]
+    capped_grads_and_vars = [(tf.sign(gv[0])*tf.minimum(tf.maximum(tf.abs(gv[0]), 1e-5), 1e5), gv[1]) for gv in grads_and_vars]
     train_step = train_step_opt.apply_gradients(capped_grads_and_vars)
 
     correct_prediction = tf.equal(tf.argmax(y_out_hard,1), tf.argmax(y_hard_,1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
-    sess.run(tf.global_variables_initializer())
+    sess.run(tf.initialize_all_variables())
 
     iters_per_epoch = mnist.train.num_examples/batch_size
     for i in range(num_epochs*iters_per_epoch):
         batch = mnist.train.next_batch(batch_size,shuffle=False)
+        # if i % 10 == 0:
+        #     print 'W1\t\tmax: %.3e\t\tmin: %.3e\t\tmean: %.3e' % (tf.reduce_max(W1).eval(), tf.reduce_min(W1).eval(), tf.reduce_mean(W1).eval())
+        #     print 'W2\t\tmax: %.3e\t\tmin: %.3e\t\tmean: %.3e' % (tf.reduce_max(W2).eval(), tf.reduce_min(W2).eval(), tf.reduce_mean(W2).eval())
+        #     print 'W3\t\tmax: %.3e\t\tmin: %.3e\t\tmean: %.3e' % (tf.reduce_max(W3).eval(), tf.reduce_min(W3).eval(), tf.reduce_mean(W3).eval())
+        #     for gv in sess.run(grads_and_vars, feed_dict={x: batch[0],
+        #                           y_soft_: y_soft[(i%iters_per_epoch)*batch_size:((i%iters_per_epoch)+1)*batch_size],
+        #                           y_hard_: batch[1]}):
+        #         print tf.reduce_max(gv[0]).eval(), tf.reduce_min(gv[0]).eval(), tf.reduce_mean(gv[0]).eval()
         # if i%1000 == 0:
         #     train_accuracy = accuracy.eval(feed_dict={x:batch[0], y_hard_: batch[1]})
         #     print("step %d, training accuracy %g"%(i, train_accuracy))
