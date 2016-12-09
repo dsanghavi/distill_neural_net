@@ -88,7 +88,7 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs):
 
     # train_step = tf.train.AdamOptimizer(lr).minimize(cross_entropy)
     global_step = tf.Variable(0, trainable=False)
-    learning_rate = tf.train.exponential_decay(lr, global_step, iters_per_epoch, 0.5, staircase=True)
+    learning_rate = tf.train.exponential_decay(lr, global_step, iters_per_epoch, 0.9, staircase=True)
     train_step_opt = tf.train.AdamOptimizer(learning_rate)
     grads_and_vars = train_step_opt.compute_gradients(cross_entropy, [W1,b1,W2,b2,W3,b3])
     capped_grads_and_vars = [(tf.sign(gv[0])*tf.minimum(tf.maximum(tf.abs(gv[0]), 1e-8), 1e8), gv[1]) for gv in grads_and_vars]

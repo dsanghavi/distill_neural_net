@@ -9,7 +9,7 @@ import datetime
 
 ################################################################
 # RUN PARAMETERS
-lrs = np.logspace(-7,-2,6)
+lrs = np.logspace(-6,-3,10)
 num_repeat = 1                      # could be 10?
 batch_size = 50
 num_epochs = 5                      # could be changed... 5? 10? 20? write_logits.py uses 20.
@@ -77,7 +77,7 @@ def simple_network_no_distill(sess, lr, batch_size, num_epochs):
 
     # train_step = tf.train.AdamOptimizer(lr).minimize(cross_entropy)
     global_step = tf.Variable(0, trainable=False)
-    learning_rate = tf.train.exponential_decay(lr, global_step, iters_per_epoch, 0.1, staircase=True)
+    learning_rate = tf.train.exponential_decay(lr, global_step, iters_per_epoch, 0.9, staircase=True)
     train_step_opt = tf.train.AdamOptimizer(learning_rate)
     grads_and_vars = train_step_opt.compute_gradients(cross_entropy, [W1,b1,W2,b2,W3,b3])
     capped_grads_and_vars = [(tf.sign(gv[0])*tf.minimum(tf.maximum(tf.abs(gv[0]), 1e-8), 1e8), gv[1]) for gv in grads_and_vars]
