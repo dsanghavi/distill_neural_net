@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+import sys
 
 def weight_variable(shape):
     initial = tf.truncated_normal(shape, stddev=0.1)
@@ -54,3 +55,21 @@ def softmax_T(logits, T, tensor=False):
         l1 = np.exp(logits / T)
         l1 /= np.maximum(np.sum(l1, axis=1, keepdims=True), 1e-12)
     return l1
+
+class Logger(object):
+    def __init__(self, f_log_name):
+        self.terminal = sys.stdout
+        self.log = open(f_log_name, 'w')
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+
+    def flush(self):
+        pass
+
+    def close_log(self):
+        self.log.close()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close_log()
