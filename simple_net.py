@@ -10,12 +10,12 @@ import datetime
 ################################################################
 # RUN PARAMETERS
 # lrs = np.logspace(-5,-3,7)
-Ts = np.logspace(np.log10(1),np.log10(20),11)
-alphas, step = np.linspace(0,1,6,retstep=True)
+Ts = np.logspace(np.log10(1),np.log10(10),6)
+alphas, step = np.linspace(0,1,5,retstep=True)
 lrs = np.array([1e-5])
 # Ts = np.array([2])
 # alphas = np.array([0, 0.6])
-num_repeat = 5                      # could be 10?
+num_repeat = 1                      # could be 10?
 batch_size = 50
 num_epochs = 5                      # could be changed... 5? 10? 20? write_logits.py uses 20.
 hidden_sizes = [800, 800]           # could be increased when ready...
@@ -69,50 +69,56 @@ logits_cumbersome = logits_cumbersome[:truncated_size]
 def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs, tensorboard=False):
     iters_per_epoch = mnist_train_truncated[0].shape[0] / batch_size
 
+    alpha_tf = tf.Variable(alpha, trainable=False, dtype=tf.float64)
+    T_tf = tf.Variable(T, trainable=False, dtype=tf.float64)
+
     if tensorboard:
         with tf.name_scope('input'):
             x = tf.placeholder(tf.float64, shape=[None, 784])
             y_soft_ = tf.placeholder(tf.float64, shape=[None, 10])
             y_hard_ = tf.placeholder(tf.float64, shape=[None, 10])
 
+            h1, W1, b1 = hf.nn_layer(x,28*28,hidden_sizes[0],'fc1',act=tf.nn.relu,operation=tf.matmul)
+            h2, W2, b2 = hf.nn_layer(h1,hidden_sizes[0],hidden_sizes[1],'fc2',act=tf.nn.relu,operation=tf.matmul)
+            y_out, W3, b3 = hf.nn_layer(h2,hidden_sizes[1],10,'out',act=tf.identity,operation=tf.matmul)
     else:
         x = tf.placeholder(tf.float64, shape=[None, 784])
         y_soft_ = tf.placeholder(tf.float64, shape=[None, 10])
         y_hard_ = tf.placeholder(tf.float64, shape=[None, 10])
 
-    W1 = hf.weight_variable([28 * 28, hidden_sizes[0]])
-    b1 = hf.bias_variable([hidden_sizes[0]])
-    h1 = tf.nn.relu(tf.matmul(x, W1) + b1)
+        W1 = hf.weight_variable([28 * 28, hidden_sizes[0]])
+        b1 = hf.bias_variable([hidden_sizes[0]])
+        h1 = tf.nn.relu(tf.matmul(x, W1) + b1)
 
-    W2 = hf.weight_variable([hidden_sizes[0], hidden_sizes[1]])
-    b2 = hf.bias_variable([hidden_sizes[1]])
-    h2 = tf.nn.relu(tf.matmul(h1, W2) + b2)
+        W2 = hf.weight_variable([hidden_sizes[0], hidden_sizes[1]])
+        b2 = hf.bias_variable([hidden_sizes[1]])
+        h2 = tf.nn.relu(tf.matmul(h1, W2) + b2)
 
-    W3 = hf.weight_variable([hidden_sizes[1], 10])
-    b3 = hf.bias_variable([10])
-    y_out = tf.matmul(h2, W3) + b3
+        W3 = hf.weight_variable([hidden_sizes[1], 10])
+        b3 = hf.bias_variable([10])
+        y_out = tf.matmul(h2, W3) + b3
 
-    # h1, W1, b1 = hf.nn_layer(x,28*28,hidden_sizes[0],'fc1',act=tf.nn.relu,operation=tf.matmul)
-    # h2, W2, b2 = hf.nn_layer(h1,hidden_sizes[0],hidden_sizes[1],'fc2',act=tf.nn.relu,operation=tf.matmul)
-    # y_out, W3, b3 = hf.nn_layer(h2,hidden_sizes[1],10,'out',act=tf.identity,operation=tf.matmul)
-
-    y_out_soft = hf.softmax_T(y_out, T, tensor=True)    # temperature softmax
-    y_out_hard = hf.softmax_T(y_out, 1, tensor=True)         # temperature=1 softmax
-
+    y_out_soft = hf.softmax_T(y_out, T_tf, tensor=True)    # temperature softmax
+    y_out_hard = hf.softmax_T(y_out, tf.Variable(1.0, trainable=False, dtype=tf.float64), tensor=True)         # temperature=1 softmax
 
     if tensorboard:
         with tf.name_scope('cross_entropy_soft'):
             with tf.name_scope('total'):
-                cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(tf.maximum(y_out_soft, 1e-12)), reduction_indices=[1]))
+                cross_entropy_soft = tf.reduce_mean(
+                    tf.neg(tf.reduce_sum(tf.mul(y_soft_, tf.log(y_out_soft)), reduction_indices=[1])))
+
             tf.scalar_summary('cross entropy soft', cross_entropy_soft)
 
         with tf.name_scope('cross_entropy_hard'):
             with tf.name_scope('total'):
-                cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(tf.maximum(y_out_hard, 1e-12)), reduction_indices=[1]))
+                cross_entropy_hard = tf.reduce_mean(
+                    tf.neg(tf.reduce_sum(tf.mul(y_hard_, tf.log(y_out_hard)), reduction_indices=[1])))
+
             tf.scalar_summary('cross entropy hard', cross_entropy_hard)
 
         with tf.name_scope('cross_entropy'):
-            cross_entropy = ((T**2)*alpha*cross_entropy_soft) + ((1-alpha)*cross_entropy_hard)
+            cross_entropy = tf.add((tf.mul(tf.pow(T_tf, 2), tf.mul(alpha_tf, cross_entropy_soft))),
+                                   (tf.mul(tf.sub(tf.constant(1.0,dtype=tf.float64),alpha_tf), cross_entropy_hard)))
             tf.scalar_summary('cross entropy', cross_entropy)
 
         with tf.name_scope('accuracy'):
@@ -124,9 +130,11 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs, tensorboa
     else:
         # cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(tf.maximum(y_out_soft, 1e-12)), reduction_indices=[1]))
         # cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(tf.maximum(y_out_hard, 1e-12)), reduction_indices=[1]))
-        cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(y_out_soft), reduction_indices=[1]))
-        cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(y_out_hard), reduction_indices=[1]))
-        cross_entropy = ((T**2)*alpha*cross_entropy_soft) + ((1-alpha)*cross_entropy_hard)
+        cross_entropy_soft = tf.reduce_mean(tf.neg(tf.reduce_sum(tf.mul(y_soft_, tf.log(y_out_soft)), reduction_indices=[1])))
+        cross_entropy_hard = tf.reduce_mean(tf.neg(tf.reduce_sum(tf.mul(y_hard_, tf.log(y_out_hard)), reduction_indices=[1])))
+        cross_entropy = tf.add((tf.mul(tf.pow(T_tf,2),tf.mul(alpha_tf,cross_entropy_soft))), (tf.mul(tf.sub(tf.constant(1.0,dtype=tf.float64),alpha_tf),cross_entropy_hard)))
+        # cross_entropy = (alpha * cross_entropy_soft) + ((1 - alpha) * cross_entropy_hard)
+
 
         # # Shifted below - train_step computation
 
@@ -264,7 +272,7 @@ for repeat in range(num_repeat):
     tf.reset_default_graph()
     sess = tf.InteractiveSession()
 
-    x, y_hard_, accuracy = simple_network(sess, y_soft, best_lr, best_T, best_alpha, batch_size, num_epochs, tensorboard=False)
+    x, y_hard_, accuracy = simple_network(sess, y_soft, best_lr, best_T, best_alpha, batch_size, num_epochs, tensorboard=True)
 
     avg_train_acc += hf.accuracy_in_batches_alt(mnist_train_truncated[0], mnist_train_truncated[1], accuracy, x, y_hard_, batch_size=batch_size)
     avg_val_acc   += hf.accuracy_in_batches(mnist.validation, accuracy, x, y_hard_, batch_size=batch_size)
