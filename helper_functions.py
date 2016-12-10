@@ -3,11 +3,11 @@ import tensorflow as tf
 import sys
 
 def weight_variable(shape):
-    initial = tf.truncated_normal(shape, stddev=0.1)
+    initial = tf.truncated_normal(shape, stddev=0.1, dtype=tf.float64)
     return tf.Variable(initial)
 
 def bias_variable(shape):
-    initial = tf.constant(0.1, shape=shape)
+    initial = tf.constant(0.1, shape=shape, dtype=tf.float64)
     return tf.Variable(initial)
 
 def conv2d(x, W):
@@ -50,10 +50,10 @@ def softmax_T(logits, T, tensor=False):
     # train_logits dim = (N, C), T = float
     if tensor:
         l1 = tf.exp(logits / T)
-        l1 /= tf.maximum(tf.reduce_sum(l1, reduction_indices=1, keep_dims=True), 1e-12)
+        l1 /= tf.maximum(tf.reduce_sum(l1, reduction_indices=1, keep_dims=True), 1e-15)
     else:
         l1 = np.exp(logits / T)
-        l1 /= np.maximum(np.sum(l1, axis=1, keepdims=True), 1e-12)
+        l1 /= np.maximum(np.sum(l1, axis=1, keepdims=True), 1e-15)
     return l1
 
 def variable_summaries(var, name):

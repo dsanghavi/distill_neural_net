@@ -71,14 +71,14 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs, tensorboa
 
     if tensorboard:
         with tf.name_scope('input'):
-            x = tf.placeholder(tf.float32, shape=[None, 784])
-            y_soft_ = tf.placeholder(tf.float32, shape=[None, 10])
-            y_hard_ = tf.placeholder(tf.float32, shape=[None, 10])
+            x = tf.placeholder(tf.float64, shape=[None, 784])
+            y_soft_ = tf.placeholder(tf.float64, shape=[None, 10])
+            y_hard_ = tf.placeholder(tf.float64, shape=[None, 10])
 
     else:
-        x = tf.placeholder(tf.float32, shape=[None, 784])
-        y_soft_ = tf.placeholder(tf.float32, shape=[None, 10])
-        y_hard_ = tf.placeholder(tf.float32, shape=[None, 10])
+        x = tf.placeholder(tf.float64, shape=[None, 784])
+        y_soft_ = tf.placeholder(tf.float64, shape=[None, 10])
+        y_hard_ = tf.placeholder(tf.float64, shape=[None, 10])
 
     W1 = hf.weight_variable([28 * 28, hidden_sizes[0]])
     b1 = hf.bias_variable([hidden_sizes[0]])
@@ -119,26 +119,28 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs, tensorboa
             with tf.name_scope('correct_prediction'):
                 correct_prediction = tf.equal(tf.argmax(y_out_hard, 1), tf.argmax(y_hard_, 1))
             with tf.name_scope('accuracy'):
-                accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+                accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float64))
             tf.scalar_summary('accuracy', accuracy)
     else:
-        cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(tf.maximum(y_out_soft, 1e-12)), reduction_indices=[1]))
-        cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(tf.maximum(y_out_hard, 1e-12)), reduction_indices=[1]))
+        # cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(tf.maximum(y_out_soft, 1e-12)), reduction_indices=[1]))
+        # cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(tf.maximum(y_out_hard, 1e-12)), reduction_indices=[1]))
+        cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(y_out_soft), reduction_indices=[1]))
+        cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(y_out_hard), reduction_indices=[1]))
         cross_entropy = ((T**2)*alpha*cross_entropy_soft) + ((1-alpha)*cross_entropy_hard)
 
         # # Shifted below - train_step computation
 
         correct_prediction = tf.equal(tf.argmax(y_out_hard,1), tf.argmax(y_hard_,1))
-        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float64))
 
 
-    # train_step = tf.train.AdamOptimizer(lr).minimize(cross_entropy)
-    global_step = tf.Variable(0, trainable=False)
-    learning_rate = tf.train.exponential_decay(lr, global_step, iters_per_epoch, 0.9, staircase=True)
-    train_step_opt = tf.train.AdamOptimizer(learning_rate)
-    grads_and_vars = train_step_opt.compute_gradients(cross_entropy, [W1,b1,W2,b2,W3,b3])
-    capped_grads_and_vars = [(tf.sign(gv[0])*tf.minimum(tf.maximum(tf.abs(gv[0]), 1e-8), 1e8), gv[1]) for gv in grads_and_vars]
-    train_step = train_step_opt.apply_gradients(capped_grads_and_vars, global_step=global_step)
+    train_step = tf.train.AdamOptimizer(lr).minimize(cross_entropy)
+    # global_step = tf.Variable(0, trainable=False)
+    # learning_rate = tf.train.exponential_decay(lr, global_step, iters_per_epoch, 0.9, staircase=True)
+    # train_step_opt = tf.train.AdamOptimizer(learning_rate)
+    # grads_and_vars = train_step_opt.compute_gradients(cross_entropy, [W1,b1,W2,b2,W3,b3])
+    # capped_grads_and_vars = [(tf.sign(gv[0])*tf.minimum(tf.maximum(tf.abs(gv[0]), 1e-8), 1e8), gv[1]) for gv in grads_and_vars]
+    # train_step = train_step_opt.apply_gradients(capped_grads_and_vars, global_step=global_step)
 
     if tensorboard:
         # Merge all the summaries and write them out to /tmp/mnist_logs (by default)
