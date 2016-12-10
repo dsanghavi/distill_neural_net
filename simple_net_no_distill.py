@@ -42,19 +42,21 @@ print '\n'
 ################################################################
 # LOAD DATA
 
-# Read train_logits
-logits_cumbersome = np.loadtxt('Data/logits_mnist_tuned3.csv', delimiter=', ')
-
 # Read input data
 from tensorflow.examples.tutorials.mnist import input_data
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
+
+# USE MNIST.VALIDATION AND MNIST.TEST AS USUAL
+# BUT USE THE FOLLOWING TRUNCATED SET FOR TRAINING
+truncated_size = 20000
+mnist_train_truncated = mnist.train.next_batch(batch_size=truncated_size,shuffle=False)
 
 
 ################################################################
 # NEURAL NETWORK
 
 def simple_network_no_distill(sess, lr, batch_size, num_epochs):
-    iters_per_epoch = mnist.train.num_examples / batch_size
+    iters_per_epoch = mnist_train_truncated[0].shape[0] / batch_size
 
     x = tf.placeholder(tf.float32, shape=[None, 784])
     y_hard_ = tf.placeholder(tf.float32, shape=[None, 10])
@@ -89,7 +91,8 @@ def simple_network_no_distill(sess, lr, batch_size, num_epochs):
     sess.run(tf.global_variables_initializer())
 
     for i in range(num_epochs*iters_per_epoch):
-        batch = mnist.train.next_batch(batch_size,shuffle=False)
+        x_batch = mnist_train_truncated[0][(i % iters_per_epoch) * batch_size:((i % iters_per_epoch) + 1) * batch_size]
+        y_hard_batch = mnist_train_truncated[1][(i % iters_per_epoch) * batch_size:((i % iters_per_epoch) + 1) * batch_size]
         # # TO PRINT WEIGHTS AND GRADIENTS
         # if i % 10 == 0:
         #     print 'W1\t\tmax: %.3e\t\tmin: %.3e\t\tmean: %.3e' % (tf.reduce_max(W1).eval(), tf.reduce_min(W1).eval(), tf.reduce_mean(W1).eval())
@@ -104,48 +107,49 @@ def simple_network_no_distill(sess, lr, batch_size, num_epochs):
         #     train_accuracy = accuracy.eval(feed_dict={x:batch[0], y_hard_: batch[1]})
         #     val_acc = hf.accuracy_in_batches(mnist.validation, accuracy, x, y_hard_, batch_size=batch_size)
         #     print("step %d\t\ttraining accuracy %.4f\t\tval acc %.4f"%(i, train_accuracy, val_acc))
-        train_step.run(feed_dict={x: batch[0], y_hard_: batch[1]})
+        train_step.run(feed_dict={x: x_batch, y_hard_: y_hard_batch})
 
     return x, y_hard_, accuracy
 
 
-################################################################
-# HYPERPARAMETER OPTIMIZATION
-print '\nHyperparameter optimization...\n'
-
-best_val_acc = None
-best_lr = None
-
-# Tensorflow stuff
-lr_index = -1
-for lr in lrs:
-    lr_index += 1
-
-    avg_val_acc  = 0
-    for repeat in range(num_repeat):
-        tf.reset_default_graph()
-        sess = tf.InteractiveSession()
-
-        x, y_hard_, accuracy = simple_network_no_distill(sess, lr, batch_size, num_epochs)
-
-        val_acc  = hf.accuracy_in_batches(mnist.validation, accuracy, x, y_hard_, batch_size=batch_size)
-        avg_val_acc  += val_acc
-
-        sess.close()
-
-    avg_val_acc /= num_repeat
-    print 'lr: %.3e    val_acc: %.4f' % (lr, avg_val_acc)
-
-    if avg_val_acc > best_val_acc:
-        best_val_acc = avg_val_acc
-        best_lr = lr
-
-print '\n\nbest_lr: %.3e    best_val_acc: %.4f' % (best_lr, best_val_acc)
+# ################################################################
+# # HYPERPARAMETER OPTIMIZATION
+# print '\nHyperparameter optimization...\n'
+#
+# best_val_acc = None
+# best_lr = None
+#
+# # Tensorflow stuff
+# lr_index = -1
+# for lr in lrs:
+#     lr_index += 1
+#
+#     avg_val_acc  = 0
+#     for repeat in range(num_repeat):
+#         tf.reset_default_graph()
+#         sess = tf.InteractiveSession()
+#
+#         x, y_hard_, accuracy = simple_network_no_distill(sess, lr, batch_size, num_epochs)
+#
+#         val_acc  = hf.accuracy_in_batches(mnist.validation, accuracy, x, y_hard_, batch_size=batch_size)
+#         avg_val_acc  += val_acc
+#
+#         sess.close()
+#
+#     avg_val_acc /= num_repeat
+#     print 'lr: %.3e    val_acc: %.4f' % (lr, avg_val_acc)
+#
+#     if avg_val_acc > best_val_acc:
+#         best_val_acc = avg_val_acc
+#         best_lr = lr
+#
+# print '\n\nbest_lr: %.3e    best_val_acc: %.4f' % (best_lr, best_val_acc)
 
 
 ################################################################
 # TRAIN A MODEL WITH OPTIMAL HYPERPARAMETERS FOR LONGER
-num_epochs = 10
+best_lr = 1e-5
+num_epochs = 5
 print '\n\nTraining a model with optimal hyperparameters for', num_epochs, 'epochs...'
 
 avg_train_acc = 0
@@ -158,7 +162,7 @@ for repeat in range(num_repeat):
 
     x, y_hard_, accuracy = simple_network_no_distill(sess, best_lr, batch_size, num_epochs)
 
-    avg_train_acc += hf.accuracy_in_batches(mnist.train, accuracy, x, y_hard_, batch_size=batch_size)
+    avg_train_acc += hf.accuracy_in_batches_alt(mnist_train_truncated[0], mnist_train_truncated[1], accuracy, x, y_hard_, batch_size=batch_size)
     avg_val_acc   += hf.accuracy_in_batches(mnist.validation, accuracy, x, y_hard_, batch_size=batch_size)
     avg_test_acc  += hf.accuracy_in_batches(mnist.test, accuracy, x, y_hard_, batch_size=batch_size)
 

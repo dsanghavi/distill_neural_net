@@ -9,13 +9,13 @@ import datetime
 
 ################################################################
 # RUN PARAMETERS
-lrs = np.logspace(-6,-2,9)
-Ts = np.logspace(np.log10(1),np.log10(20),10)
+# lrs = np.logspace(-5,-3,7)
+Ts = np.logspace(np.log10(1),np.log10(20),11)
 alphas, step = np.linspace(0,1,6,retstep=True)
-# lrs = np.array([1e-3])
-# Ts = np.array([2.1147])
-# alphas = np.array([0.50])
-num_repeat = 1                      # could be 10?
+lrs = np.array([1e-5])
+# Ts = np.array([2])
+# alphas = np.array([0, 0.6])
+num_repeat = 5                      # could be 10?
 batch_size = 50
 num_epochs = 5                      # could be changed... 5? 10? 20? write_logits.py uses 20.
 hidden_sizes = [800, 800]           # could be increased when ready...
@@ -56,67 +56,81 @@ logits_cumbersome = np.loadtxt('Data/logits_mnist_tuned3.csv', delimiter=', ')
 from tensorflow.examples.tutorials.mnist import input_data
 mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 
+# USE MNIST.VALIDATION AND MNIST.TEST AS USUAL
+# BUT USE THE FOLLOWING TRUNCATED SET FOR TRAINING
+truncated_size = 20000
+mnist_train_truncated = mnist.train.next_batch(batch_size=truncated_size,shuffle=False)
+logits_cumbersome = logits_cumbersome[:truncated_size]
+
 
 ################################################################
 # NEURAL NETWORK
 
-def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs):
-    iters_per_epoch = mnist.train.num_examples / batch_size
+def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs, tensorboard=False):
+    iters_per_epoch = mnist_train_truncated[0].shape[0] / batch_size
 
-    with tf.name_scope('input'):
+    if tensorboard:
+        with tf.name_scope('input'):
+            x = tf.placeholder(tf.float32, shape=[None, 784])
+            y_soft_ = tf.placeholder(tf.float32, shape=[None, 10])
+            y_hard_ = tf.placeholder(tf.float32, shape=[None, 10])
+
+    else:
         x = tf.placeholder(tf.float32, shape=[None, 784])
         y_soft_ = tf.placeholder(tf.float32, shape=[None, 10])
         y_hard_ = tf.placeholder(tf.float32, shape=[None, 10])
 
-    # W1 = hf.weight_variable([28 * 28, hidden_sizes[0]])
-    # b1 = hf.bias_variable([hidden_sizes[0]])
-    # h1 = tf.nn.relu(tf.matmul(x, W1) + b1)
+    W1 = hf.weight_variable([28 * 28, hidden_sizes[0]])
+    b1 = hf.bias_variable([hidden_sizes[0]])
+    h1 = tf.nn.relu(tf.matmul(x, W1) + b1)
 
-    h1, W1, b1 = hf.nn_layer(x,28*28,hidden_sizes[0],'fc1',act=tf.nn.relu,operation=tf.matmul)
+    W2 = hf.weight_variable([hidden_sizes[0], hidden_sizes[1]])
+    b2 = hf.bias_variable([hidden_sizes[1]])
+    h2 = tf.nn.relu(tf.matmul(h1, W2) + b2)
 
+    W3 = hf.weight_variable([hidden_sizes[1], 10])
+    b3 = hf.bias_variable([10])
+    y_out = tf.matmul(h2, W3) + b3
 
-    # W2 = hf.weight_variable([hidden_sizes[0], hidden_sizes[1]])
-    # b2 = hf.bias_variable([hidden_sizes[1]])
-    # h2 = tf.nn.relu(tf.matmul(h1, W2) + b2)
-
-    h2, W2, b2 = hf.nn_layer(h1,hidden_sizes[0],hidden_sizes[1],'fc2',act=tf.nn.relu,operation=tf.matmul)
-
-
-    # W3 = hf.weight_variable([hidden_sizes[1], 10])
-    # b3 = hf.bias_variable([10])
-    # y_out = tf.matmul(h2, W3) + b3
-    
-    y_out, W3, b3 = hf.nn_layer(h2,hidden_sizes[1],10,'out',act=tf.identity,operation=tf.matmul)
-    
+    # h1, W1, b1 = hf.nn_layer(x,28*28,hidden_sizes[0],'fc1',act=tf.nn.relu,operation=tf.matmul)
+    # h2, W2, b2 = hf.nn_layer(h1,hidden_sizes[0],hidden_sizes[1],'fc2',act=tf.nn.relu,operation=tf.matmul)
+    # y_out, W3, b3 = hf.nn_layer(h2,hidden_sizes[1],10,'out',act=tf.identity,operation=tf.matmul)
 
     y_out_soft = hf.softmax_T(y_out, T, tensor=True)    # temperature softmax
     y_out_hard = hf.softmax_T(y_out, 1, tensor=True)         # temperature=1 softmax
 
-    # cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(tf.maximum(y_out_soft, 1e-12)), reduction_indices=[1]))
-    # cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(tf.maximum(y_out_hard, 1e-12)), reduction_indices=[1]))
-    # cross_entropy = ((T**2)*alpha*cross_entropy_soft) + ((1-alpha)*cross_entropy_hard)
-    # cross_entropy = (alpha * cross_entropy_soft) + ((1 - alpha) * cross_entropy_hard)
 
-#Shifted below - train_step computation
+    if tensorboard:
+        with tf.name_scope('cross_entropy_soft'):
+            with tf.name_scope('total'):
+                cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(tf.maximum(y_out_soft, 1e-12)), reduction_indices=[1]))
+            tf.scalar_summary('cross entropy soft', cross_entropy_soft)
 
-    # correct_prediction = tf.equal(tf.argmax(y_out_hard,1), tf.argmax(y_hard_,1))
-    # accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+        with tf.name_scope('cross_entropy_hard'):
+            with tf.name_scope('total'):
+                cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(tf.maximum(y_out_hard, 1e-12)), reduction_indices=[1]))
+            tf.scalar_summary('cross entropy hard', cross_entropy_hard)
 
+        with tf.name_scope('cross_entropy'):
+            cross_entropy = ((T**2)*alpha*cross_entropy_soft) + ((1-alpha)*cross_entropy_hard)
+            tf.scalar_summary('cross entropy', cross_entropy)
 
-    # -------------
-    with tf.name_scope('cross_entropy_soft'):
-        with tf.name_scope('total'):
-            cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(tf.maximum(y_out_soft, 1e-12)), reduction_indices=[1]))
-        tf.scalar_summary('cross entropy soft', cross_entropy_soft)
-
-    with tf.name_scope('cross_entropy_hard'):
-        with tf.name_scope('total'):
-            cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(tf.maximum(y_out_hard, 1e-12)), reduction_indices=[1]))
-        tf.scalar_summary('cross entropy hard', cross_entropy_hard)
-
-    with tf.name_scope('cross_entropy'):
+        with tf.name_scope('accuracy'):
+            with tf.name_scope('correct_prediction'):
+                correct_prediction = tf.equal(tf.argmax(y_out_hard, 1), tf.argmax(y_hard_, 1))
+            with tf.name_scope('accuracy'):
+                accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+            tf.scalar_summary('accuracy', accuracy)
+    else:
+        cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(tf.maximum(y_out_soft, 1e-12)), reduction_indices=[1]))
+        cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(tf.maximum(y_out_hard, 1e-12)), reduction_indices=[1]))
         cross_entropy = ((T**2)*alpha*cross_entropy_soft) + ((1-alpha)*cross_entropy_hard)
-        tf.scalar_summary('cross entropy', cross_entropy)
+
+        # # Shifted below - train_step computation
+
+        correct_prediction = tf.equal(tf.argmax(y_out_hard,1), tf.argmax(y_hard_,1))
+        accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
 
     # train_step = tf.train.AdamOptimizer(lr).minimize(cross_entropy)
     global_step = tf.Variable(0, trainable=False)
@@ -126,26 +140,20 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs):
     capped_grads_and_vars = [(tf.sign(gv[0])*tf.minimum(tf.maximum(tf.abs(gv[0]), 1e-8), 1e8), gv[1]) for gv in grads_and_vars]
     train_step = train_step_opt.apply_gradients(capped_grads_and_vars, global_step=global_step)
 
-    with tf.name_scope('accuracy'):
-        with tf.name_scope('correct_prediction'):
-            correct_prediction = tf.equal(tf.argmax(y_out_hard, 1), tf.argmax(y_hard_, 1))
-        with tf.name_scope('accuracy'):
-            accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-        tf.scalar_summary('accuracy', accuracy)
-
-    # Merge all the summaries and write them out to /tmp/mnist_logs (by default)
-    merged = tf.merge_all_summaries()
-    timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d_%H%M%S')
-    train_writer = tf.train.SummaryWriter('tensorboard_logs/mnist_simple_logs_' + timestamp + '/train',
-                                        sess.graph)
-    # Test writer actually logs validation accuracies
-    val_writer = tf.train.SummaryWriter('tensorboard_logs/mnist_simple_logs_' + timestamp + '/val')
-
+    if tensorboard:
+        # Merge all the summaries and write them out to /tmp/mnist_logs (by default)
+        merged = tf.merge_all_summaries()
+        timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d_%H%M%S')
+        train_writer = tf.train.SummaryWriter('tensorboard_logs/mnist_simple_logs_' + timestamp + '/train',
+                                            sess.graph)
+        # Test writer actually logs validation accuracies
+        val_writer = tf.train.SummaryWriter('tensorboard_logs/mnist_simple_logs_' + timestamp + '/val')
 
     sess.run(tf.global_variables_initializer())
 
     for i in range(num_epochs*iters_per_epoch):
-        batch = mnist.train.next_batch(batch_size,shuffle=False)
+        x_batch = mnist_train_truncated[0][(i%iters_per_epoch)*batch_size:((i%iters_per_epoch)+1)*batch_size]
+        y_hard_batch = mnist_train_truncated[1][(i % iters_per_epoch) * batch_size:((i % iters_per_epoch) + 1) * batch_size]
         # if i % 10 == 0:
         #     print 'W1\t\tmax: %.3e\t\tmin: %.3e\t\tmean: %.3e' % (tf.reduce_max(W1).eval(), tf.reduce_min(W1).eval(), tf.reduce_mean(W1).eval())
         #     print 'W2\t\tmax: %.3e\t\tmin: %.3e\t\tmean: %.3e' % (tf.reduce_max(W2).eval(), tf.reduce_min(W2).eval(), tf.reduce_mean(W2).eval())
@@ -157,23 +165,26 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs):
         # if i%1000 == 0:
         #     train_accuracy = accuracy.eval(feed_dict={x:batch[0], y_hard_: batch[1]})
         #     print("step %d, training accuracy %g"%(i, train_accuracy))
-            
-        #     summary, train_accuracy = sess.run([merged,accuracy],feed_dict={x:batch[0], y_hard_: batch[1]}) 
-        #     val_writer.add_summary(summary, i)
-        #     print("step %d, training accuracy %g"%(i, train_accuracy))
+        #     if tensorboard:
+        #         summary, train_accuracy = sess.run([merged,accuracy],feed_dict={x:batch[0], y_hard_: batch[1]})
+        #         val_writer.add_summary(summary, i)
+        #         print("step %d, training accuracy %g"%(i, train_accuracy))
+        # if i%50 == 0:
+        #     print 'val_acc: %.4f' % hf.accuracy_in_batches(mnist.validation, accuracy, x, y_hard_, batch_size=batch_size)
 
-        train_step.run(feed_dict={x: batch[0],
+        train_step.run(feed_dict={x: x_batch,
                                   y_soft_: y_soft[(i%iters_per_epoch)*batch_size:((i%iters_per_epoch)+1)*batch_size],
-                                  y_hard_: batch[1]})
+                                  y_hard_: y_hard_batch})
 
-        summary, _ = sess.run([merged, train_step],feed_dict={x: batch[0], 
-                                                              y_soft_: y_soft[(i%iters_per_epoch)*batch_size:((i%iters_per_epoch)+1)*batch_size],
-                                                              y_hard_: batch[1]})
-        train_writer.add_summary(summary, i)
+        if tensorboard:
+            summary, _ = sess.run([merged, train_step],feed_dict={x: x_batch,
+                                                                  y_soft_: y_soft[(i%iters_per_epoch)*batch_size:((i%iters_per_epoch)+1)*batch_size],
+                                                                  y_hard_: y_hard_batch})
+            train_writer.add_summary(summary, i)
 
-    train_writer.close()
-    val_writer.close()
-
+    if tensorboard:
+        train_writer.close()
+        val_writer.close()
 
     return x, y_hard_, accuracy
 
@@ -237,7 +248,8 @@ np.savetxt('Results/results_np.csv', results_np.reshape([lrs.shape[0], Ts.shape[
 
 ################################################################
 # TRAIN A MODEL WITH OPTIMAL HYPERPARAMETERS FOR LONGER
-num_epochs = 10
+num_epochs = 5
+
 print '\n\nTraining a model with optimal hyperparameters for', num_epochs, 'epochs...'
 
 y_soft = hf.softmax_T(logits_cumbersome, best_T)  # temperature softmax
@@ -250,9 +262,9 @@ for repeat in range(num_repeat):
     tf.reset_default_graph()
     sess = tf.InteractiveSession()
 
-    x, y_hard_, accuracy = simple_network(sess, y_soft, best_lr, best_T, best_alpha, batch_size, num_epochs)
+    x, y_hard_, accuracy = simple_network(sess, y_soft, best_lr, best_T, best_alpha, batch_size, num_epochs, tensorboard=False)
 
-    avg_train_acc += hf.accuracy_in_batches(mnist.train, accuracy, x, y_hard_, batch_size=batch_size)
+    avg_train_acc += hf.accuracy_in_batches_alt(mnist_train_truncated[0], mnist_train_truncated[1], accuracy, x, y_hard_, batch_size=batch_size)
     avg_val_acc   += hf.accuracy_in_batches(mnist.validation, accuracy, x, y_hard_, batch_size=batch_size)
     avg_test_acc  += hf.accuracy_in_batches(mnist.test, accuracy, x, y_hard_, batch_size=batch_size)
 
@@ -262,7 +274,37 @@ avg_train_acc /= num_repeat
 avg_val_acc   /= num_repeat
 avg_test_acc  /= num_repeat
 
-print '\n\nACCURACIES WITH A MODEL TRAINED WITH SOFT TARGETS AND OPTIMAL HYPERPARAMETERS'
+print '\n\nACCURACIES WITH A MODEL TRAINED WITH SOFT TARGETS'
+print 'On training set:   %.4f' % avg_train_acc
+print 'On validation set: %.4f' % avg_val_acc
+print 'On test set:       %.4f' % avg_test_acc
+
+
+print '\n\nTraining a model without soft targets for', num_epochs, 'epochs...'
+
+y_soft = hf.softmax_T(logits_cumbersome, 1.0)  # temperature softmax
+
+avg_train_acc = 0
+avg_val_acc   = 0
+avg_test_acc  = 0
+
+for repeat in range(num_repeat):
+    tf.reset_default_graph()
+    sess = tf.InteractiveSession()
+
+    x, y_hard_, accuracy = simple_network(sess, y_soft, best_lr, 1.0, 0.0, batch_size, num_epochs, tensorboard=True)
+
+    avg_train_acc += hf.accuracy_in_batches_alt(mnist_train_truncated[0], mnist_train_truncated[1], accuracy, x, y_hard_, batch_size=batch_size)
+    avg_val_acc   += hf.accuracy_in_batches(mnist.validation, accuracy, x, y_hard_, batch_size=batch_size)
+    avg_test_acc  += hf.accuracy_in_batches(mnist.test, accuracy, x, y_hard_, batch_size=batch_size)
+
+    sess.close()
+
+avg_train_acc /= num_repeat
+avg_val_acc   /= num_repeat
+avg_test_acc  /= num_repeat
+
+print '\n\nACCURACIES WITH A MODEL TRAINED WITHOUT SOFT TARGETS'
 print 'On training set:   %.4f' % avg_train_acc
 print 'On validation set: %.4f' % avg_val_acc
 print 'On test set:       %.4f' % avg_test_acc
@@ -273,4 +315,3 @@ print 'On test set:       %.4f' % avg_test_acc
 # Stop redirecting pring out to log
 logger.close_log()
 sys.stdout = orig_stdout
-
