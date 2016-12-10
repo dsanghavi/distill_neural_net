@@ -18,7 +18,7 @@ lrs = np.array([1e-5])
 num_repeat = 1                      # could be 10?
 batch_size = 50
 num_epochs = 5                      # could be changed... 5? 10? 20? write_logits.py uses 20.
-hidden_sizes = [800, 800]           # could be increased when ready...
+hidden_sizes = [300, 300]           # could be increased when ready...
 
 
 ################################################################
@@ -104,15 +104,16 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs, tensorboa
     if tensorboard:
         with tf.name_scope('cross_entropy_soft'):
             with tf.name_scope('total'):
-                cross_entropy_soft = tf.reduce_mean(
-                    tf.neg(tf.reduce_sum(tf.mul(y_soft_, tf.log(y_out_soft)), reduction_indices=[1])))
+                cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(y_out_soft), reduction_indices=[1]))
+                cross_entropy_soft = tf.add(tf.mul(tf.sub(tf.constant(1.0, dtype=tf.float64), tf.pow(T_tf, 2)),
+                                                   tf.stop_gradient(cross_entropy_soft)),
+                                            tf.mul(tf.pow(T_tf, 2), cross_entropy_soft))
 
             tf.scalar_summary('cross entropy soft', cross_entropy_soft)
 
         with tf.name_scope('cross_entropy_hard'):
             with tf.name_scope('total'):
-                cross_entropy_hard = tf.reduce_mean(
-                    tf.neg(tf.reduce_sum(tf.mul(y_hard_, tf.log(y_out_hard)), reduction_indices=[1])))
+                cross_entropy_hard = tf.reduce_mean(tf.neg(tf.reduce_sum(tf.mul(y_hard_, tf.log(y_out_hard)), reduction_indices=[1])))
 
             tf.scalar_summary('cross entropy hard', cross_entropy_hard)
 
@@ -130,10 +131,11 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs, tensorboa
                 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float64))
             tf.scalar_summary('accuracy', accuracy)
     else:
-        # cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(tf.maximum(y_out_soft, 1e-12)), reduction_indices=[1]))
-        # cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(tf.maximum(y_out_hard, 1e-12)), reduction_indices=[1]))
-        cross_entropy_soft = tf.reduce_mean(tf.neg(tf.reduce_sum(tf.mul(y_soft_, tf.log(y_out_soft)), reduction_indices=[1])))
-        cross_entropy_hard = tf.reduce_mean(tf.neg(tf.reduce_sum(tf.mul(y_hard_, tf.log(y_out_hard)), reduction_indices=[1])))
+        cross_entropy_soft = tf.reduce_mean(-tf.reduce_sum(y_soft_ * tf.log(y_out_soft), reduction_indices=[1]))
+        cross_entropy_soft = tf.add(tf.mul(tf.sub(tf.constant(1.0, dtype=tf.float64), tf.pow(T_tf, 2)),
+                                           tf.stop_gradient(cross_entropy_soft)),
+                                    tf.mul(tf.pow(T_tf, 2), cross_entropy_soft))
+        cross_entropy_hard = tf.reduce_mean(-tf.reduce_sum(y_hard_ * tf.log(y_out_hard), reduction_indices=[1]))
         # cross_entropy = tf.add((tf.mul(tf.pow(T_tf,2),tf.mul(alpha_tf,cross_entropy_soft))), (tf.mul(tf.sub(tf.constant(1.0,dtype=tf.float64),alpha_tf),cross_entropy_hard)))
         cross_entropy = tf.add((tf.mul(alpha_tf,cross_entropy_soft)), (tf.mul(tf.sub(tf.constant(1.0,dtype=tf.float64),alpha_tf),cross_entropy_hard)))
         # cross_entropy = (alpha * cross_entropy_soft) + ((1 - alpha) * cross_entropy_hard)
@@ -148,13 +150,7 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs, tensorboa
     # train_step = tf.train.AdamOptimizer(lr).minimize(cross_entropy)
     global_step = tf.Variable(0, trainable=False)
     learning_rate = tf.train.exponential_decay(lr, global_step, iters_per_epoch, 0.9, staircase=True)
-    train_step_opt = tf.train.AdamOptimizer(learning_rate)
-    # grads_and_vars = train_step_opt.compute_gradients(cross_entropy, [W1,b1,W2,b2,W3,b3])
-    # capped_grads_and_vars = [(tf.sign(gv[0])*tf.minimum(tf.maximum(tf.abs(gv[0]), 1e-8), 1e8), gv[1]) for gv in grads_and_vars]
-    # train_step = train_step_opt.apply_gradients(capped_grads_and_vars, global_step=global_step)
-    grads_and_vars = train_step_opt.compute_gradients(cross_entropy, [cross_entropy_soft])
-    T_squared_grads_and_vars = [(tf.mul(tf.pow(T_tf,2), gv[0]), gv[1]) for gv in grads_and_vars]
-    train_step = train_step_opt.apply_gradients(T_squared_grads_and_vars, global_step=global_step)
+    train_step = tf.train.AdamOptimizer(learning_rate).minimize(cross_entropy)
 
     if tensorboard:
         # Merge all the summaries and write them out to /tmp/mnist_logs (by default)
