@@ -184,15 +184,16 @@ def simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs, tensorboa
         # if i%50 == 0:
         #     print 'val_acc: %.4f' % hf.accuracy_in_batches(mnist.validation, accuracy, x, y_hard_, batch_size=batch_size)
 
-        train_step.run(feed_dict={x: x_batch,
-                                  y_soft_: y_soft[(i%iters_per_epoch)*batch_size:((i%iters_per_epoch)+1)*batch_size],
-                                  y_hard_: y_hard_batch})
-
         if tensorboard:
             summary, _ = sess.run([merged, train_step],feed_dict={x: x_batch,
                                                                   y_soft_: y_soft[(i%iters_per_epoch)*batch_size:((i%iters_per_epoch)+1)*batch_size],
                                                                   y_hard_: y_hard_batch})
             train_writer.add_summary(summary, i)
+        else:
+            train_step.run(feed_dict={x: x_batch,
+                                      y_soft_: y_soft[(i % iters_per_epoch) * batch_size:((
+                                                                                          i % iters_per_epoch) + 1) * batch_size],
+                                      y_hard_: y_hard_batch})
 
     if tensorboard:
         train_writer.close()
