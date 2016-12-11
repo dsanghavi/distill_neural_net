@@ -10,24 +10,26 @@ import datetime
 ################################################################
 # RUN PARAMETERS
 # lrs = np.logspace(-5,-3,7)
-Ts = np.logspace(np.log10(1),np.log10(10),6)
-alphas, step = np.linspace(0,1,5,retstep=True)
-lrs = np.array([1e-5])
+Ts = np.logspace(np.log10(1),np.log10(15),8)
+alphas, step = np.linspace(0,0.75,2,retstep=True)
+lrs = np.array([1e-3])
 # Ts = np.array([2])
 # alphas = np.array([0, 0.6])
-num_repeat = 1                      # could be 10?
+num_repeat = 3                      # could be 10?
 batch_size = 50
-num_epochs = 5                      # could be changed... 5? 10? 20? write_logits.py uses 20.
+num_epochs_tuning = 2                      # could be changed... 5? 10? 20? write_logits.py uses 20.
+num_epochs_final = 2
 hidden_sizes = [300, 300]           # could be increased when ready...
 
 
 ################################################################
 # !!! SHOULD REVERSE THIS AT THE END OF THIS SCRIPT !!!
 # Set up printing out a log (redirects all prints to the file)
+log_timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d_%H%M%S')
 orig_stdout = sys.stdout
 f_log_name = 'Results/' + os.path.basename(__file__) \
                         + '_' \
-                        + datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d_%H%M%S') \
+                        + log_timestamp \
                         + '.log'
 logger = hf.Logger(f_log_name)
 sys.stdout = logger
@@ -41,7 +43,8 @@ print 'Ts =', Ts
 print 'alphas =', alphas
 print 'num_repeat =', num_repeat
 print 'batch_size =', batch_size
-print 'num_epochs =', num_epochs
+print 'num_epochs_tuning =', num_epochs_tuning
+print 'num_epochs_final =', num_epochs_final
 print 'hidden_sizes =', hidden_sizes
 print '\n'
 
@@ -234,7 +237,7 @@ for lr in lrs:
                 tf.reset_default_graph()
                 sess = tf.InteractiveSession()
 
-                x, y_hard_, accuracy = simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs)
+                x, y_hard_, accuracy = simple_network(sess, y_soft, lr, T, alpha, batch_size, num_epochs_tuning)
 
                 val_acc  = hf.accuracy_in_batches(mnist.validation, accuracy, x, y_hard_, batch_size=batch_size)
                 avg_val_acc  += val_acc
@@ -256,15 +259,13 @@ for lr in lrs:
 print '\n\nbest_lr: %.3e    best_T: %.4f    best_alpha: %.2f    best_val_acc: %.4f' % (best_lr, best_T, best_alpha, best_val_acc)
 
 
-np.savetxt('Results/results_np.csv', results_np.reshape([lrs.shape[0], Ts.shape[0]*alphas.shape[0]]), delimiter=', ')
-# np.savetxt('Results/results_np_w_repeat.csv', results_np_w_repeat.reshape([lrs.shape[0], Ts.shape[0]*alphas.shape[0]*num_repeat]), delimiter=', ')
+np.savetxt('Results/results_np_'+log_timestamp+'.csv', results_np.reshape([lrs.shape[0], Ts.shape[0]*alphas.shape[0]]), delimiter=', ')
+# np.savetxt('Results/results_np_w_repeat_'+log_timestamp+'.csv', results_np_w_repeat.reshape([lrs.shape[0], Ts.shape[0]*alphas.shape[0]*num_repeat]), delimiter=', ')
 
 
 ################################################################
 # TRAIN A MODEL WITH OPTIMAL HYPERPARAMETERS FOR LONGER
-num_epochs = 5
-
-print '\n\nTraining a model with optimal hyperparameters for', num_epochs, 'epochs...'
+print '\n\nTraining a model with optimal hyperparameters for', num_epochs_final, 'epochs...'
 
 y_soft = hf.softmax_T(logits_cumbersome, best_T)  # temperature softmax
 
@@ -276,7 +277,7 @@ for repeat in range(num_repeat):
     tf.reset_default_graph()
     sess = tf.InteractiveSession()
 
-    x, y_hard_, accuracy = simple_network(sess, y_soft, best_lr, best_T, best_alpha, batch_size, num_epochs, tensorboard=True)
+    x, y_hard_, accuracy = simple_network(sess, y_soft, best_lr, best_T, best_alpha, batch_size, num_epochs_final, tensorboard=True)
 
     avg_train_acc += hf.accuracy_in_batches_alt(mnist_train_truncated[0], mnist_train_truncated[1], accuracy, x, y_hard_, batch_size=batch_size)
     avg_val_acc   += hf.accuracy_in_batches(mnist.validation, accuracy, x, y_hard_, batch_size=batch_size)
@@ -294,7 +295,7 @@ print 'On validation set: %.4f' % avg_val_acc
 print 'On test set:       %.4f' % avg_test_acc
 
 
-print '\n\nTraining a model without soft targets for', num_epochs, 'epochs...'
+print '\n\nTraining a model without soft targets for', num_epochs_final, 'epochs...'
 
 y_soft = hf.softmax_T(logits_cumbersome, 1.0)  # temperature softmax
 
@@ -306,7 +307,7 @@ for repeat in range(num_repeat):
     tf.reset_default_graph()
     sess = tf.InteractiveSession()
 
-    x, y_hard_, accuracy = simple_network(sess, y_soft, best_lr, 1.0, 0.0, batch_size, num_epochs, tensorboard=True)
+    x, y_hard_, accuracy = simple_network(sess, y_soft, best_lr, 1.0, 0.0, batch_size, num_epochs_final, tensorboard=True)
 
     avg_train_acc += hf.accuracy_in_batches_alt(mnist_train_truncated[0], mnist_train_truncated[1], accuracy, x, y_hard_, batch_size=batch_size)
     avg_val_acc   += hf.accuracy_in_batches(mnist.validation, accuracy, x, y_hard_, batch_size=batch_size)

@@ -10,11 +10,11 @@ import datetime
 ################################################################
 # RUN PARAMETERS
 lr = 1e-5                  # best_lr, comes from simple_net
-T = 1.8206                      # best_T, comes from simple_net
+T = 5.0                      # best_T, comes from simple_net
 alpha = 0.80                # best_alpha, comes from simple_net
-num_repeat = 5
+num_repeat = 1
 batch_size = 50
-num_epochs = 10
+num_epochs = 5
 hidden_sizes = [800, 800]
 
 
@@ -69,9 +69,9 @@ y_soft = hf.softmax_T(train_soft_labels, T)
 tf.reset_default_graph()
 sess = tf.InteractiveSession()
 
-x = tf.placeholder(tf.float32, shape=[None, 784])
-y_soft_ = tf.placeholder(tf.float32, shape=[None, 10])
-y_hard_ = tf.placeholder(tf.float32, shape=[None, 10])
+x = tf.placeholder(tf.float64, shape=[None, 784])
+y_soft_ = tf.placeholder(tf.float64, shape=[None, 10])
+y_hard_ = tf.placeholder(tf.float64, shape=[None, 10])
 
 W1 = hf.weight_variable([28 * 28, hidden_sizes[0]])
 b1 = hf.bias_variable([hidden_sizes[0]])
@@ -99,7 +99,7 @@ capped_grads_and_vars = [(tf.sign(gv[0])*tf.minimum(tf.maximum(tf.abs(gv[0]), 1e
 train_step = train_step_opt.apply_gradients(capped_grads_and_vars)
 
 correct_prediction = tf.equal(tf.argmax(y_out_hard,1), tf.argmax(y_hard_,1))
-accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float64))
 
 sess.run(tf.global_variables_initializer())
 
