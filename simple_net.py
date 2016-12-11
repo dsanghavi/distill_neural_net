@@ -9,17 +9,17 @@ import datetime
 
 ################################################################
 # RUN PARAMETERS
-# lrs = np.logspace(-5,-3,7)
+lrs = np.logspace(-5,-3,7)
 Ts = np.logspace(np.log10(1),np.log10(15),8)
 alphas, step = np.linspace(0,0.75,2,retstep=True)
-lrs = np.array([1e-3])
+# lrs = np.array([1e-3])
 # Ts = np.array([2])
 # alphas = np.array([0, 0.6])
-num_repeat = 3                      # could be 10?
+num_repeat = 5                      # could be 10?
 batch_size = 50
-num_epochs_tuning = 2                      # could be changed... 5? 10? 20? write_logits.py uses 20.
-num_epochs_final = 2
-hidden_sizes = [300, 300]           # could be increased when ready...
+num_epochs_tuning = 5                      # could be changed... 5? 10? 20? write_logits.py uses 20.
+num_epochs_final = 5
+hidden_sizes = [100, 100]           # could be increased when ready...
 
 
 ################################################################
