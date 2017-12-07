@@ -1,5 +1,6 @@
 # distill_neural_net
-
+See the report pdf file for more information.<br/>
+<br/>
 Directory structure:<br/>
 <br/>
 \<project_root><br/>
